@@ -19,20 +19,6 @@
 #define IS_ACCEL
 #endif
 
-#if   DEVICE_TYPE == DEVICE_TYPE_CPU
-#elif DEVICE_TYPE == DEVICE_TYPE_GPU
-#define REAL_SHM
-#elif DEVICE_TYPE == DEVICE_TYPE_ACCEL
-#endif
-
-#ifdef REAL_SHM
-#define SHM_TYPE __local
-#define SCR_TYPE __local
-#else
-#define SHM_TYPE __constant
-#define SCR_TYPE
-#endif
-
 /**
  * vendor specific
  */
@@ -80,6 +66,21 @@
 #define IS_GENERIC
 #endif
 
+#if   DEVICE_TYPE == DEVICE_TYPE_CPU
+#elif DEVICE_TYPE == DEVICE_TYPE_GPU
+// AMD fails with mode 6211
+#ifdef IS_NV
+#define REAL_SHM
+#endif
+#elif DEVICE_TYPE == DEVICE_TYPE_ACCEL
+#endif
+
+#ifdef REAL_SHM
+#define SHM_TYPE __local
+#else
+#define SHM_TYPE __constant
+#endif
+
 /**
  * function declarations can have a large influence depending on the opencl runtime
  */
@@ -94,6 +95,12 @@
 #endif
 #else
 #define DECLSPEC
+#endif
+
+#if (defined IS_AMD && AMD_GCN < 3)
+#define MAYBE_VOLATILE volatile
+#else
+#define MAYBE_VOLATILE
 #endif
 
 /**

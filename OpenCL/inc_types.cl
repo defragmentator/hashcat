@@ -361,7 +361,7 @@ DECLSPEC u32 hc_bfe_S (const u32 a, const u32 b, const u32 c)
   return amd_bfe (a, b, c);
 }
 
-DECLSPEC u32 hc_bytealign (const u32x a, const u32x b, const u32x c)
+DECLSPEC u32x hc_bytealign (const u32x a, const u32x b, const u32x c)
 {
   return amd_bytealign (a, b, c);
 }
@@ -1530,6 +1530,8 @@ typedef struct electrum_wallet
 
 typedef struct ansible_vault
 {
+  u32 cipher;
+  u32 version;
   u32 ct_data_buf[4096];
   u32 ct_data_len;
 } ansible_vault_t;

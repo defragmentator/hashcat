@@ -29,12 +29,10 @@ __kernel void m06100_mxx (__global pw_t *pws, __constant const kernel_rule_t *ru
    * shared
    */
 
-  #ifdef REAL_SHM
-
   __local u32 s_Ch[8][256];
   __local u32 s_Cl[8][256];
 
-  for (u32 i = lid; i < 256; i += lsz)
+  for (MAYBE_VOLATILE u32 i = lid; i < 256; i += lsz)
   {
     s_Ch[0][i] = Ch[0][i];
     s_Ch[1][i] = Ch[1][i];
@@ -56,13 +54,6 @@ __kernel void m06100_mxx (__global pw_t *pws, __constant const kernel_rule_t *ru
   }
 
   barrier (CLK_LOCAL_MEM_FENCE);
-
-  #else
-
-  __constant u32 (*s_Ch)[256] = Ch;
-  __constant u32 (*s_Cl)[256] = Cl;
-
-  #endif
 
   if (gid >= gid_max) return;
 
@@ -113,12 +104,10 @@ __kernel void m06100_sxx (__global pw_t *pws, __constant const kernel_rule_t *ru
    * shared
    */
 
-  #ifdef REAL_SHM
-
   __local u32 s_Ch[8][256];
   __local u32 s_Cl[8][256];
 
-  for (u32 i = lid; i < 256; i += lsz)
+  for (MAYBE_VOLATILE u32 i = lid; i < 256; i += lsz)
   {
     s_Ch[0][i] = Ch[0][i];
     s_Ch[1][i] = Ch[1][i];
@@ -140,13 +129,6 @@ __kernel void m06100_sxx (__global pw_t *pws, __constant const kernel_rule_t *ru
   }
 
   barrier (CLK_LOCAL_MEM_FENCE);
-
-  #else
-
-  __constant u32 (*s_Ch)[256] = Ch;
-  __constant u32 (*s_Cl)[256] = Cl;
-
-  #endif
 
   if (gid >= gid_max) return;
 

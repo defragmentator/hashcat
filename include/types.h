@@ -43,6 +43,11 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+typedef int8_t  i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+
 // timer
 
 #if defined (_WIN)
@@ -57,14 +62,17 @@ typedef struct timespec   hc_timer_t;
 
 #if defined (_POSIX)
 #include <pthread.h>
+#include <semaphore.h>
 #endif
 
 #if defined (_WIN)
-typedef HANDLE            hc_thread_t;
-typedef CRITICAL_SECTION  hc_thread_mutex_t;
+typedef HANDLE              hc_thread_t;
+typedef HANDLE              hc_thread_mutex_t;
+typedef HANDLE              hc_thread_semaphore_t;
 #else
-typedef pthread_t         hc_thread_t;
-typedef pthread_mutex_t   hc_thread_mutex_t;
+typedef pthread_t           hc_thread_t;
+typedef pthread_mutex_t     hc_thread_mutex_t;
+typedef sem_t               hc_thread_semaphore_t;
 #endif
 
 // enums
@@ -681,7 +689,7 @@ typedef enum user_options_map
   IDX_VERACRYPT_PIM             = 0xff3e,
   IDX_VERSION_LOWER             = 'v',
   IDX_VERSION                   = 'V',
-  IDX_WORKLOAD_PROFILE          = 'w'
+  IDX_WORKLOAD_PROFILE          = 'w',
 
 } user_options_map_t;
 
@@ -1854,6 +1862,11 @@ typedef struct device_info
   int     kernel_loops_dev;
   int     kernel_threads_dev;
   int     vector_width_dev;
+  int     salt_pos_dev;
+  int     innerloop_pos_dev;
+  int     innerloop_left_dev;
+  int     iteration_pos_dev;
+  int     iteration_left_dev;
 
 } device_info_t;
 

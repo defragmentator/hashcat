@@ -1,3 +1,24 @@
+* changes v4.2.1 -> xxx
+
+##
+## Improvements
+##
+
+- Workaround some AMD OpenCL runtime segmentation faults
+- Allow bitcoin master key length not be exactly 96 byte a multiple of 16
+- Getting rid of OPTS_TYPE_HASH_COPY for Ansible Vault
+- Add a tracker for salts, amplifier and iterations to status screen
+
+##
+## Bugs
+##
+
+- Fixed a invalid scalar datatype return value in hc_bytealign() where it should be a vector datatype return value
+- Fixed a problem with attack mode -a 7 together with stdout mode where the mask bytes were missing in the output
+- Fixed a problem with tab completion where --self-test-disable did incorrecly expect a further parameter/value
+- Fixed the ciphertext max length in Ansible Vault parser
+- Removed duplicate words in the dictionary file example.dict
+
 * changes v4.2.0 -> v4.2.1
 
 ##
