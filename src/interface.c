@@ -17647,16 +17647,10 @@ int wpa_pmkid_pbkdf2_parse_hash (u8 *input_buf, u32 input_len, hash_t *hash_buf,
 
   // salt
 
-  salt->salt_buf[0] = wpa_pmkid->pmkid_data[0];
-  salt->salt_buf[1] = wpa_pmkid->pmkid_data[1];
-  salt->salt_buf[2] = wpa_pmkid->pmkid_data[2];
-  salt->salt_buf[3] = wpa_pmkid->pmkid_data[3];
-  salt->salt_buf[4] = wpa_pmkid->pmkid_data[4];
-  salt->salt_buf[5] = wpa_pmkid->pmkid_data[5];
-  salt->salt_buf[6] = wpa_pmkid->pmkid_data[6];
-  salt->salt_buf[7] = wpa_pmkid->pmkid_data[7];
+  memcpy (salt->salt_buf, wpa_pmkid->essid_buf, wpa_pmkid->essid_len);
 
-  salt->salt_len  = 32;
+  salt->salt_len = wpa_pmkid->essid_len;
+
   salt->salt_iter = ROUNDS_WPA_PBKDF2 - 1;
 
   // hash
@@ -27220,7 +27214,8 @@ int hashconfig_init (hashcat_ctx_t *hashcat_ctx)
     case 16800:  hashconfig->hash_type      = HASH_TYPE_WPA_PMKID_PBKDF2;
                  hashconfig->salt_type      = SALT_TYPE_EMBEDDED;
                  hashconfig->attack_exec    = ATTACK_EXEC_OUTSIDE_KERNEL;
-                 hashconfig->opts_type      = OPTS_TYPE_PT_GENERATE_LE;
+                 hashconfig->opts_type      = OPTS_TYPE_PT_GENERATE_LE
+                                            | OPTS_TYPE_AUX1;
                  hashconfig->kern_type      = KERN_TYPE_WPA_PMKID_PBKDF2;
                  hashconfig->dgst_size      = DGST_SIZE_4_4;
                  hashconfig->parse_func     = wpa_pmkid_pbkdf2_parse_hash;
@@ -27237,7 +27232,8 @@ int hashconfig_init (hashcat_ctx_t *hashcat_ctx)
     case 16801:  hashconfig->hash_type      = HASH_TYPE_WPA_PMKID_PMK;
                  hashconfig->salt_type      = SALT_TYPE_EMBEDDED;
                  hashconfig->attack_exec    = ATTACK_EXEC_OUTSIDE_KERNEL;
-                 hashconfig->opts_type      = OPTS_TYPE_PT_GENERATE_LE;
+                 hashconfig->opts_type      = OPTS_TYPE_PT_GENERATE_LE
+                                            | OPTS_TYPE_AUX1;
                  hashconfig->kern_type      = KERN_TYPE_WPA_PMKID_PMK;
                  hashconfig->dgst_size      = DGST_SIZE_4_4;
                  hashconfig->parse_func     = wpa_pmkid_pmk_parse_hash;
@@ -27326,11 +27322,11 @@ int hashconfig_init (hashcat_ctx_t *hashcat_ctx)
 
     char source_file[256] = { 0 };
 
-    generate_source_kernel_filename (hashconfig->attack_exec, user_options_extra->attack_kern, hashconfig->kern_type, false, folder_config->shared_dir, source_file);
+    generate_source_kernel_filename (user_options->slow_candidates, hashconfig->attack_exec, user_options_extra->attack_kern, hashconfig->kern_type, false, folder_config->shared_dir, source_file);
 
     hashconfig->has_pure_kernel = hc_path_read (source_file);
 
-    generate_source_kernel_filename (hashconfig->attack_exec, user_options_extra->attack_kern, hashconfig->kern_type, true, folder_config->shared_dir, source_file);
+    generate_source_kernel_filename (user_options->slow_candidates, hashconfig->attack_exec, user_options_extra->attack_kern, hashconfig->kern_type, true, folder_config->shared_dir, source_file);
 
     hashconfig->has_optimized_kernel = hc_path_read (source_file);
 
@@ -27734,14 +27730,30 @@ u32 hashconfig_get_kernel_loops (hashcat_ctx_t *hashcat_ctx)
 
   u32 kernel_loops_fixed = 0;
 
-  if (hashconfig->hash_mode == 1500 && user_options->attack_mode == ATTACK_MODE_BF)
+  if (user_options->slow_candidates == true)
   {
-    kernel_loops_fixed = 1024;
   }
-
-  if (hashconfig->hash_mode == 3000 && user_options->attack_mode == ATTACK_MODE_BF)
+  else
   {
-    kernel_loops_fixed = 1024;
+    if (hashconfig->hash_mode == 1500 && user_options->attack_mode == ATTACK_MODE_BF)
+    {
+      kernel_loops_fixed = 1024;
+    }
+
+    if (hashconfig->hash_mode == 3000 && user_options->attack_mode == ATTACK_MODE_BF)
+    {
+      kernel_loops_fixed = 1024;
+    }
+
+    if (hashconfig->hash_mode == 14000 && user_options->attack_mode == ATTACK_MODE_BF)
+    {
+      kernel_loops_fixed = 1024;
+    }
+
+    if (hashconfig->hash_mode == 14100 && user_options->attack_mode == ATTACK_MODE_BF)
+    {
+      kernel_loops_fixed = 1024;
+    }
   }
 
   if (hashconfig->hash_mode == 8900)
@@ -27757,16 +27769,6 @@ u32 hashconfig_get_kernel_loops (hashcat_ctx_t *hashcat_ctx)
   if (hashconfig->hash_mode == 12500)
   {
     kernel_loops_fixed = ROUNDS_RAR3 / 16;
-  }
-
-  if (hashconfig->hash_mode == 14000 && user_options->attack_mode == ATTACK_MODE_BF)
-  {
-    kernel_loops_fixed = 1024;
-  }
-
-  if (hashconfig->hash_mode == 14100 && user_options->attack_mode == ATTACK_MODE_BF)
-  {
-    kernel_loops_fixed = 1024;
   }
 
   if (hashconfig->hash_mode == 15700)
@@ -27832,17 +27834,11 @@ int hashconfig_get_pw_max (hashcat_ctx_t *hashcat_ctx, const bool optimized_kern
 
     if ((user_options->rp_files_cnt > 0) || (user_options->rp_gen > 0))
     {
-      switch (user_options_extra->attack_kern)
+      if (user_options->slow_candidates == true)
       {
-        case ATTACK_KERN_STRAIGHT:  pw_max = MIN (pw_max, PW_DICTMAX);
-                                    break;
-        case ATTACK_KERN_COMBI:     pw_max = MIN (pw_max, PW_DICTMAX);
-                                    break;
+        pw_max = MIN (pw_max, PW_DICTMAX);
       }
-    }
-    else
-    {
-      if (hashconfig->attack_exec == ATTACK_EXEC_INSIDE_KERNEL)
+      else
       {
         switch (user_options_extra->attack_kern)
         {
@@ -27852,9 +27848,36 @@ int hashconfig_get_pw_max (hashcat_ctx_t *hashcat_ctx, const bool optimized_kern
                                       break;
         }
       }
+    }
+    else
+    {
+      if (user_options->slow_candidates == true)
+      {
+        if (hashconfig->attack_exec == ATTACK_EXEC_INSIDE_KERNEL)
+        {
+          pw_max = MIN (pw_max, PW_DICTMAX);
+        }
+        else
+        {
+          // If we have a NOOP rule then we can process words from wordlists > PW_DICTMAX for slow hashes
+        }
+      }
       else
       {
-        // If we have a NOOP rule then we can process words from wordlists > PW_DICTMAX for slow hashes
+        if (hashconfig->attack_exec == ATTACK_EXEC_INSIDE_KERNEL)
+        {
+          switch (user_options_extra->attack_kern)
+          {
+            case ATTACK_KERN_STRAIGHT:  pw_max = MIN (pw_max, PW_DICTMAX);
+                                        break;
+            case ATTACK_KERN_COMBI:     pw_max = MIN (pw_max, PW_DICTMAX);
+                                        break;
+          }
+        }
+        else
+        {
+          // If we have a NOOP rule then we can process words from wordlists > PW_DICTMAX for slow hashes
+        }
       }
     }
 

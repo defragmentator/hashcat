@@ -262,6 +262,7 @@ LFLAGS_NATIVE           := $(LFLAGS)
 LFLAGS_NATIVE           += -Wl,--dynamicbase -Wl,--nxcompat
 LFLAGS_NATIVE           += -lpsapi
 LFLAGS_NATIVE           += -liconv
+LFLAGS_NATIVE           += -lws2_32
 endif # MSYS2
 
 ##
@@ -299,9 +300,11 @@ LFLAGS_CROSS_LINUX64    += -lm
 LFLAGS_CROSS_WIN32      := $(LFLAGS)
 LFLAGS_CROSS_WIN32      += -Wl,--dynamicbase -Wl,--nxcompat
 LFLAGS_CROSS_WIN32      += -lpsapi
+LFLAGS_CROSS_WIN32      += -lws2_32
 LFLAGS_CROSS_WIN64      := $(LFLAGS)
 LFLAGS_CROSS_WIN64      += -Wl,--dynamicbase -Wl,--nxcompat
 LFLAGS_CROSS_WIN64      += -lpsapi
+LFLAGS_CROSS_WIN64      += -lws2_32
 
 CFLAGS_REMOVE_LZMA        := -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wundef
 
@@ -315,7 +318,7 @@ CFLAGS_CROSS_WIN64_LZMA   := $(filter-out $(CFLAGS_REMOVE_LZMA),$(CFLAGS_CROSS_W
 ## Objects
 ##
 
-OBJS_ALL                := affinity autotune benchmark bitmap bitops combinator common convert cpt cpu_aes cpu_crc32 cpu_des cpu_md4 cpu_md5 cpu_sha1 cpu_sha256 debugfile dictstat dispatch dynloader event ext_ADL ext_nvapi ext_nvml ext_OpenCL ext_sysfs ext_lzma filehandling folder hashcat hashes hlfmt hwmon induct interface locking logfile loopback memory monitor mpsp opencl outfile_check outfile pidfile potfile restore rp rp_cpu rp_kernel_on_cpu rp_kernel_on_cpu_optimized selftest shared status stdout straight terminal thread timer tuningdb usage user_options wordlist
+OBJS_ALL                := affinity autotune benchmark bitmap bitops combinator common convert cpt cpu_aes cpu_crc32 cpu_des cpu_md4 cpu_md5 cpu_sha1 cpu_sha256 debugfile dictstat dispatch dynloader event ext_ADL ext_nvapi ext_nvml ext_OpenCL ext_sysfs ext_lzma filehandling folder hashcat hashes hlfmt hwmon induct interface locking logfile loopback memory monitor mpsp opencl outfile_check outfile pidfile potfile restore rp rp_cpu rp_kernel_on_cpu rp_kernel_on_cpu_optimized selftest slow_candidates shared status stdout straight terminal thread timer tuningdb usage user_options wordlist
 
 NATIVE_STATIC_OBJS      := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).NATIVE.STATIC.o)
 NATIVE_SHARED_OBJS      := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).NATIVE.SHARED.o)

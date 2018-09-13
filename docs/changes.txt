@@ -1,6 +1,12 @@
 * changes v4.2.1 -> xxx
 
 ##
+## Features
+##
+
+- Add new option --slow-candidates which allows hashcat to generate passwords on-host
+
+##
 ## Improvements
 ##
 
@@ -8,6 +14,11 @@
 - Allow bitcoin master key length not be exactly 96 byte a multiple of 16
 - Getting rid of OPTS_TYPE_HASH_COPY for Ansible Vault
 - Add a tracker for salts, amplifier and iterations to status screen
+- Add option --markov-hcstat2 to make it clear that the new hcstat2 format (compressed hcstat2gen output) must be used
+- Do not allocate memory segments for bitmap tables if we dont need it, for example in benchmark mode
+- Removed duplicate words in the dictionary file example.dict
+- Improved the speed of the outfile folder scan when using lots of hashes/salts
+- Added additional hybrid "passthrough" rules, to enable variable-length append/prepend attacks
 
 ##
 ## Bugs
@@ -17,7 +28,9 @@
 - Fixed a problem with attack mode -a 7 together with stdout mode where the mask bytes were missing in the output
 - Fixed a problem with tab completion where --self-test-disable did incorrecly expect a further parameter/value
 - Fixed the ciphertext max length in Ansible Vault parser
-- Removed duplicate words in the dictionary file example.dict
+- Fixed detection of unique ESSID in WPA-PMKID-* parser
+- Fixed speed/delay problem when quitting while the outfile folder is being scanned
+- Fixed a race condition in status view leading to out-of-bound reads
 
 * changes v4.2.0 -> v4.2.1
 

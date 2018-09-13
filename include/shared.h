@@ -15,6 +15,12 @@
 #include <ctype.h>
 #include <math.h>
 
+#if defined (_WIN)
+#include <winsock2.h> // needed for select()
+#else
+#include <sys/select.h>
+#endif
+
 bool overflow_check_u32_add (const u32 a, const u32 b);
 bool overflow_check_u32_mul (const u32 a, const u32 b);
 bool overflow_check_u64_add (const u64 a, const u64 b);
@@ -73,5 +79,8 @@ void hc_strncat (u8 *dst, u8 *src, const size_t n);
 
 int count_char (const u8 *buf, const int len, const u8 c);
 float get_entropy (const u8 *buf, const int len);
+
+int select_read_timeout  (int sockfd, const int sec);
+int select_write_timeout (int sockfd, const int sec);
 
 #endif // _SHARED_H
