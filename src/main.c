@@ -21,6 +21,10 @@
 #include "shared.h"
 #include "event.h"
 
+#ifdef WITH_BRAIN
+#include "brain.h"
+#endif
+
 #if defined (__MINGW64__) || defined (__MINGW32__)
 int _dowildcard = -1;
 #endif
@@ -205,6 +209,14 @@ static void main_outerloop_finished (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MA
   hashcat_user_t *hashcat_user = hashcat_ctx->hashcat_user;
   status_ctx_t   *status_ctx   = hashcat_ctx->status_ctx;
 
+  // we should never stop hashcat with STATUS_INIT:
+  // keypress thread blocks on STATUS_INIT forever!
+
+  if (status_ctx->devices_status == STATUS_INIT)
+  {
+    status_ctx->devices_status = STATUS_ERROR;
+  }
+
   // wait for outer threads
 
   status_ctx->shutdown_outer = true;
@@ -295,6 +307,10 @@ static void main_cracker_finished (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYB
     }
   }
   else if (user_options->machine_readable == true)
+  {
+    status_display (hashcat_ctx);
+  }
+  else if (user_options->status == true)
   {
     status_display (hashcat_ctx);
   }
@@ -692,6 +708,24 @@ static void main_monitor_performance_hint (MAYBE_UNUSED hashcat_ctx_t *hashcat_c
   }
 }
 
+static void main_monitor_noinput_hint (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
+{
+  const user_options_t *user_options = hashcat_ctx->user_options;
+
+  if (user_options->quiet == true) return;
+
+  event_log_advice (hashcat_ctx, "ATTENTION! Read timeout in stdin mode. The password candidates input is too slow:");
+  event_log_advice (hashcat_ctx, "* Are you sure that you are using the correct attack mode (--attack-mode or -a)?");
+  event_log_advice (hashcat_ctx, "* Are you sure that you want to use input from standard input (stdin)?");
+  event_log_advice (hashcat_ctx, "* If so, are you sure that the input from stdin (the pipe) is working correctly and is fast enough?");
+  event_log_advice (hashcat_ctx, NULL);
+}
+
+static void main_monitor_noinput_abort (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
+{
+  event_log_error (hashcat_ctx, "No password candidates received in stdin mode, aborting...");
+}
+
 static void main_monitor_temp_abort (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
 {
   const user_options_t       *user_options       = hashcat_ctx->user_options;
@@ -944,6 +978,8 @@ static void event (const u32 id, hashcat_ctx_t *hashcat_ctx, const void *buf, co
     case EVENT_MONITOR_THROTTLE2:         main_monitor_throttle2         (hashcat_ctx, buf, len); break;
     case EVENT_MONITOR_THROTTLE3:         main_monitor_throttle3         (hashcat_ctx, buf, len); break;
     case EVENT_MONITOR_PERFORMANCE_HINT:  main_monitor_performance_hint  (hashcat_ctx, buf, len); break;
+    case EVENT_MONITOR_NOINPUT_HINT:      main_monitor_noinput_hint      (hashcat_ctx, buf, len); break;
+    case EVENT_MONITOR_NOINPUT_ABORT:     main_monitor_noinput_abort     (hashcat_ctx, buf, len); break;
     case EVENT_OPENCL_SESSION_POST:       main_opencl_session_post       (hashcat_ctx, buf, len); break;
     case EVENT_OPENCL_SESSION_PRE:        main_opencl_session_pre        (hashcat_ctx, buf, len); break;
     case EVENT_OUTERLOOP_FINISHED:        main_outerloop_finished        (hashcat_ctx, buf, len); break;
@@ -1009,6 +1045,15 @@ int main (int argc, char **argv)
   // some early exits
 
   user_options_t *user_options = hashcat_ctx->user_options;
+
+  #ifdef WITH_BRAIN
+  if (user_options->brain_server == true)
+  {
+    const int rc = brain_server (user_options->brain_host, user_options->brain_port, user_options->brain_password, user_options->brain_session_whitelist);
+
+    return rc;
+  }
+  #endif
 
   if (user_options->version == true)
   {

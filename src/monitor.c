@@ -282,6 +282,30 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
         if (performance_warnings == 10) EVENT_DATA (EVENT_MONITOR_PERFORMANCE_HINT, NULL, 0);
       }
     }
+
+    // stdin read timeout check
+
+    if (status_get_progress_done (hashcat_ctx) == 0)
+    {
+      if (status_ctx->stdin_read_timeout_cnt >= STDIN_TIMEOUT_MIN)
+      {
+        if (status_ctx->stdin_read_timeout_cnt >= STDIN_TIMEOUT_MAX)
+        {
+          EVENT_DATA (EVENT_MONITOR_NOINPUT_ABORT, NULL, 0);
+
+          myabort (hashcat_ctx);
+
+          status_ctx->shutdown_inner = true;
+
+          break;
+        }
+
+        if ((status_ctx->stdin_read_timeout_cnt % STDIN_TIMEOUT_MIN) == 0)
+        {
+          EVENT_DATA (EVENT_MONITOR_NOINPUT_HINT, NULL, 0);
+        }
+      }
+    }
   }
 
   // final round of save_hash
@@ -308,7 +332,7 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
   return 0;
 }
 
-void *thread_monitor (void *p)
+HC_API_CALL void *thread_monitor (void *p)
 {
   hashcat_ctx_t *hashcat_ctx = (hashcat_ctx_t *) p;
 

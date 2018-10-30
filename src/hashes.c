@@ -27,6 +27,18 @@
 #include "timer.h"
 #include "locking.h"
 
+#ifdef WITH_BRAIN
+#include "brain.h"
+#endif
+
+int sort_by_string (const void *p1, const void *p2)
+{
+  const char *s1 = (const char *) p1;
+  const char *s2 = (const char *) p2;
+
+  return strcmp (s1, s2);
+}
+
 int sort_by_digest_p0p1 (const void *v1, const void *v2, void *v3)
 {
   const u32 *d1 = (const u32 *) v1;
@@ -254,6 +266,7 @@ void check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pl
   debugfile_ctx_t *debugfile_ctx = hashcat_ctx->debugfile_ctx;
   loopback_ctx_t  *loopback_ctx  = hashcat_ctx->loopback_ctx;
   hashes_t        *hashes        = hashcat_ctx->hashes;
+  hashconfig_t    *hashconfig    = hashcat_ctx->hashconfig;
 
   const u32 salt_pos    = plain->salt_pos;
   const u32 digest_pos  = plain->digest_pos;  // relative
@@ -274,6 +287,20 @@ void check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pl
   int plain_len = 0;
 
   build_plain (hashcat_ctx, device_param, plain, plain_buf, &plain_len);
+
+  // TOTP should be base32 encoded
+  if (hashconfig->hash_mode == KERN_TYPE_TOTP_HMACSHA1)
+  {
+    // we need a temp buffer for the base32 encoding
+    u32 temp_buf[64] = { 0 };
+    u8 *temp_ptr = (u8 *) temp_buf;
+
+    // encode our plain
+    plain_len = base32_encode (int_to_base32, (const u8 *) plain_ptr, plain_len, (u8 *) temp_buf);
+
+    // copy the base32 content into our plain buffer
+    strncpy ((char *) plain_ptr, (char *) temp_ptr, sizeof (plain_buf));
+  }
 
   // crackpos
 
@@ -1640,6 +1667,14 @@ int hashes_init_stage4 (hashcat_ctx_t *hashcat_ctx)
   u8 *tmp_buf = (u8 *) hcmalloc (HCBUFSIZ_LARGE);
 
   hashes->tmp_buf = tmp_buf;
+
+  // brain session
+
+  #ifdef WITH_BRAIN
+  const u32 brain_session = brain_compute_session (hashcat_ctx);
+
+  user_options->brain_session = brain_session;
+  #endif
 
   return 0;
 }

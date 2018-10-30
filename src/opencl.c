@@ -35,6 +35,7 @@ static const char *drm_card0_driver_path = "/sys/class/drm/card0/device/driver";
 #endif
 
 static const u32 full01 = 0x01010101;
+static const u32 full06 = 0x06060606;
 static const u32 full80 = 0x80808080;
 
 static double TARGET_MSEC_PROFILE[4] = { 2, 12, 96, 480 };
@@ -2153,6 +2154,10 @@ int run_copy (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, const
             {
               rebuild_pws_compressed_append (device_param, pws_cnt, 0x01);
             }
+            else if (hashconfig->opts_type & OPTS_TYPE_PT_ADD06)
+            {
+              rebuild_pws_compressed_append (device_param, pws_cnt, 0x06);
+            }
             else if (hashconfig->opts_type & OPTS_TYPE_PT_ADD80)
             {
               rebuild_pws_compressed_append (device_param, pws_cnt, 0x80);
@@ -2164,6 +2169,10 @@ int run_copy (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, const
           if (hashconfig->opts_type & OPTS_TYPE_PT_ADD01)
           {
             rebuild_pws_compressed_append (device_param, pws_cnt, 0x01);
+          }
+          else if (hashconfig->opts_type & OPTS_TYPE_PT_ADD06)
+          {
+            rebuild_pws_compressed_append (device_param, pws_cnt, 0x06);
           }
           else if (hashconfig->opts_type & OPTS_TYPE_PT_ADD80)
           {
@@ -2277,6 +2286,25 @@ int run_cracker (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, co
   straight_ctx_t        *straight_ctx       = hashcat_ctx->straight_ctx;
   user_options_t        *user_options       = hashcat_ctx->user_options;
   user_options_extra_t  *user_options_extra = hashcat_ctx->user_options_extra;
+
+  // do the on-the-fly combinator mode encoding
+
+  bool iconv_enabled = false;
+
+  iconv_t iconv_ctx = NULL;
+
+  char *iconv_tmp = NULL;
+
+  if (strcmp (user_options->encoding_from, user_options->encoding_to) != 0)
+  {
+    iconv_enabled = true;
+
+    iconv_ctx = iconv_open (user_options->encoding_to, user_options->encoding_from);
+
+    if (iconv_ctx == (iconv_t) -1) return -1;
+
+    iconv_tmp = (char *) hcmalloc (HCBUFSIZ_TINY);
+  }
 
   // find higest password length, this is for optimization stuff
 
@@ -2452,6 +2480,21 @@ int run_cracker (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, co
                   line_buf_new = rule_buf_out;
                 }
 
+                // do the on-the-fly encoding
+
+                if (iconv_enabled == true)
+                {
+                  char  *iconv_ptr = iconv_tmp;
+                  size_t iconv_sz  = HCBUFSIZ_TINY;
+
+                  const size_t iconv_rc = iconv (iconv_ctx, &line_buf_new, &line_len, &iconv_ptr, &iconv_sz);
+
+                  if (iconv_rc == (size_t) -1) continue;
+
+                  line_buf_new = iconv_tmp;
+                  line_len     = HCBUFSIZ_TINY - iconv_sz;
+                }
+
                 line_len = MIN (line_len, PW_MAX - 1);
 
                 u8 *ptr = (u8 *) device_param->combs_buf[i].i;
@@ -2470,6 +2513,11 @@ int run_cracker (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, co
                   if (hashconfig->opts_type & OPTS_TYPE_PT_ADD80)
                   {
                     ptr[line_len] = 0x80;
+                  }
+
+                  if (hashconfig->opts_type & OPTS_TYPE_PT_ADD06)
+                  {
+                    ptr[line_len] = 0x06;
                   }
 
                   if (hashconfig->opts_type & OPTS_TYPE_PT_ADD01)
@@ -2569,6 +2617,21 @@ int run_cracker (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, co
                   line_buf_new = rule_buf_out;
                 }
 
+                // do the on-the-fly encoding
+
+                if (iconv_enabled == true)
+                {
+                  char  *iconv_ptr = iconv_tmp;
+                  size_t iconv_sz  = HCBUFSIZ_TINY;
+
+                  const size_t iconv_rc = iconv (iconv_ctx, &line_buf_new, &line_len, &iconv_ptr, &iconv_sz);
+
+                  if (iconv_rc == (size_t) -1) continue;
+
+                  line_buf_new = iconv_tmp;
+                  line_len     = HCBUFSIZ_TINY - iconv_sz;
+                }
+
                 line_len = MIN (line_len, PW_MAX - 1);
 
                 u8 *ptr = (u8 *) device_param->combs_buf[i].i;
@@ -2588,6 +2651,11 @@ int run_cracker (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, co
                   if (hashconfig->opts_type & OPTS_TYPE_PT_ADD80)
                   {
                     ptr[line_len] = 0x80;
+                  }
+
+                  if (hashconfig->opts_type & OPTS_TYPE_PT_ADD06)
+                  {
+                    ptr[line_len] = 0x06;
                   }
 
                   if (hashconfig->opts_type & OPTS_TYPE_PT_ADD01)
@@ -3708,15 +3776,32 @@ int opencl_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
             {
               bool intel_warn = false;
 
-              float opencl_version = 0;
-              int   opencl_build   = 0;
+              // Intel OpenCL runtime 18
 
-              int res = sscanf (device_param->device_version, "OpenCL %f (Build %d)", &opencl_version, &opencl_build);
+              int opencl_driver1 = 0;
+              int opencl_driver2 = 0;
+              int opencl_driver3 = 0;
+              int opencl_driver4 = 0;
 
-              if (res == 2)
+              const int res18 = sscanf (device_param->driver_version, "%u.%u.%u.%u", &opencl_driver1, &opencl_driver2, &opencl_driver3, &opencl_driver4);
+
+              if (res18 == 4)
               {
-                // Intel OpenCL runtime 16.1.1
-                if (opencl_build < 25) intel_warn = true;
+                // so far all versions 18 are ok
+              }
+              else
+              {
+                // Intel OpenCL runtime 16
+
+                float opencl_version = 0;
+                int   opencl_build   = 0;
+
+                const int res16 = sscanf (device_param->device_version, "OpenCL %f (Build %d)", &opencl_version, &opencl_build);
+
+                if (res16 == 2)
+                {
+                  if (opencl_build < 25) intel_warn = true;
+                }
               }
 
               if (intel_warn == true)
@@ -6313,6 +6398,7 @@ int opencl_session_begin (hashcat_ctx_t *hashcat_ctx)
           device_param->kernel_params_mp_buf32[7] = 0;
 
           if (hashconfig->opts_type & OPTS_TYPE_PT_ADD01)     device_param->kernel_params_mp_buf32[5] = full01;
+          if (hashconfig->opts_type & OPTS_TYPE_PT_ADD06)     device_param->kernel_params_mp_buf32[5] = full06;
           if (hashconfig->opts_type & OPTS_TYPE_PT_ADD80)     device_param->kernel_params_mp_buf32[5] = full80;
           if (hashconfig->opts_type & OPTS_TYPE_PT_ADDBITS14) device_param->kernel_params_mp_buf32[6] = 1;
           if (hashconfig->opts_type & OPTS_TYPE_PT_ADDBITS15) device_param->kernel_params_mp_buf32[7] = 1;
@@ -6337,6 +6423,7 @@ int opencl_session_begin (hashcat_ctx_t *hashcat_ctx)
         device_param->kernel_params_mp_l_buf32[8] = 0;
 
         if (hashconfig->opts_type & OPTS_TYPE_PT_ADD01)     device_param->kernel_params_mp_l_buf32[6] = full01;
+        if (hashconfig->opts_type & OPTS_TYPE_PT_ADD06)     device_param->kernel_params_mp_l_buf32[6] = full06;
         if (hashconfig->opts_type & OPTS_TYPE_PT_ADD80)     device_param->kernel_params_mp_l_buf32[6] = full80;
         if (hashconfig->opts_type & OPTS_TYPE_PT_ADDBITS14) device_param->kernel_params_mp_l_buf32[7] = 1;
         if (hashconfig->opts_type & OPTS_TYPE_PT_ADDBITS15) device_param->kernel_params_mp_l_buf32[8] = 1;
@@ -6369,6 +6456,10 @@ int opencl_session_begin (hashcat_ctx_t *hashcat_ctx)
     size_t size_pws_base = 4;
     size_t size_tmps     = 4;
     size_t size_hooks    = 4;
+    #ifdef WITH_BRAIN
+    size_t size_brain_link_in  = 4;
+    size_t size_brain_link_out = 4;
+    #endif
 
     // instead of a thread limit we can also use a memory limit.
     // this value should represent a reasonable amount of memory a host system has per GPU.
@@ -6406,6 +6497,13 @@ int opencl_session_begin (hashcat_ctx_t *hashcat_ctx)
       // size_hooks
 
       size_hooks = (size_t) kernel_power_max * hashconfig->hook_size;
+
+      #ifdef WITH_BRAIN
+      // size_brains
+
+      size_brain_link_in  = (size_t) kernel_power_max * 1;
+      size_brain_link_out = (size_t) kernel_power_max * 8;
+      #endif
 
       if (user_options->slow_candidates == true)
       {
@@ -6471,6 +6569,10 @@ int opencl_session_begin (hashcat_ctx_t *hashcat_ctx)
         = size_pws_comp
         + size_pws_idx
         + size_hooks
+        #ifdef WITH_BRAIN
+        + size_brain_link_in
+        + size_brain_link_out
+        #endif
         + size_pws_pre
         + size_pws_base;
 
@@ -6504,6 +6606,10 @@ int opencl_session_begin (hashcat_ctx_t *hashcat_ctx)
     device_param->size_pws_base = size_pws_base;
     device_param->size_tmps     = size_tmps;
     device_param->size_hooks    = size_hooks;
+    #ifdef WITH_BRAIN
+    device_param->size_brain_link_in  = size_brain_link_in;
+    device_param->size_brain_link_out = size_brain_link_out;
+    #endif
 
     CL_rc = hc_clCreateBuffer (hashcat_ctx, device_param->context, CL_MEM_READ_WRITE,  size_pws,      NULL, &device_param->d_pws_buf);      if (CL_rc == -1) return -1;
     CL_rc = hc_clCreateBuffer (hashcat_ctx, device_param->context, CL_MEM_READ_WRITE,  size_pws_amp,  NULL, &device_param->d_pws_amp_buf);  if (CL_rc == -1) return -1;
@@ -6542,6 +6648,16 @@ int opencl_session_begin (hashcat_ctx_t *hashcat_ctx)
     char *scratch_buf = (char *) hcmalloc (HCBUFSIZ_LARGE);
 
     device_param->scratch_buf = scratch_buf;
+
+    #ifdef WITH_BRAIN
+    u8 *brain_link_in_buf = (u8 *) hcmalloc (size_brain_link_in);
+
+    device_param->brain_link_in_buf = brain_link_in_buf;
+
+    u32 *brain_link_out_buf = (u32 *) hcmalloc (size_brain_link_out);
+
+    device_param->brain_link_out_buf = brain_link_out_buf;
+    #endif
 
     pw_pre_t *pws_pre_buf = (pw_pre_t *) hcmalloc (size_pws_pre);
 
@@ -6662,6 +6778,10 @@ void opencl_session_destroy (hashcat_ctx_t *hashcat_ctx)
     hcfree (device_param->combs_buf);
     hcfree (device_param->hooks_buf);
     hcfree (device_param->scratch_buf);
+    #ifdef WITH_BRAIN
+    hcfree (device_param->brain_link_in_buf);
+    hcfree (device_param->brain_link_out_buf);
+    #endif
 
     if (device_param->d_pws_buf)        hc_clReleaseMemObject (hashcat_ctx, device_param->d_pws_buf);
     if (device_param->d_pws_amp_buf)    hc_clReleaseMemObject (hashcat_ctx, device_param->d_pws_amp_buf);

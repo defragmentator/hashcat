@@ -5,8 +5,9 @@
 
 SHARED                  := 0
 DEBUG                   := 0
-PRODUCTION              := 0
-PRODUCTION_VERSION      := v4.2.1
+PRODUCTION              := 1
+PRODUCTION_VERSION      := v5.0.0
+ENABLE_BRAIN            := 1
 
 ##
 ## Detect Operating System
@@ -118,7 +119,7 @@ endif # MSYS2
 ## You have your own headers somewhere, for example: apt-get install opencl-headers
 ##
 
-OPENCL_HEADERS_KHRONOS  := deps/OpenCL-Headers
+OPENCL_HEADERS_KHRONOS  := deps/git/OpenCL-Headers
 
 ##
 ## Cross compiler paths
@@ -151,43 +152,13 @@ LZMA_SDK_INCLUDE        := $(LIBRARY_DEV_ROOT_FOLDER)/lzma-sdk/C
 ## General compiler and linker options
 ##
 
-CFLAGS                  += -pipe -std=gnu99 -Iinclude/ -IOpenCL/
+LFLAGS                  := $(LDFLAGS)
 
 ifeq ($(PRODUCTION),0)
 CFLAGS                  += -W
 CFLAGS                  += -Wall
 CFLAGS                  += -Wextra
-CFLAGS                  += -Wfloat-equal
-CFLAGS                  += -Wundef
-CFLAGS                  += -Wshadow
-CFLAGS                  += -Wmissing-declarations
-CFLAGS                  += -Wmissing-prototypes
-CFLAGS                  += -Wpointer-arith
-CFLAGS                  += -Wstrict-prototypes
-CFLAGS                  += -Waggregate-return
-CFLAGS                  += -Wswitch-enum
-CFLAGS                  += -Winit-self
-CFLAGS                  += -Werror-implicit-function-declaration
-CFLAGS                  += -Wformat
-CFLAGS                  += -ftrapv
-CFLAGS                  += -Wwrite-strings
 endif
-
-# default Linux and freebsd thread stack size is 2MB
-# default Windows thread stack size is 1MB
-# default macOS thread stack size is 512kB
-# unfortunately, this option isn't supported by older GCC and clang versions
-
-#CFLAGS                  += -Wstack-usage=524288
-
-ifeq ($(SYSTEM_LZMA_SDK),0)
-CFLAGS                  += -Ideps/lzma_sdk/
-else
-CFLAGS                  += $(LZMA_SDK_INCLUDE)
-LDFLAGS                 += -llzmasdk
-endif
-
-LFLAGS                  := $(LDFLAGS)
 
 ifeq ($(DEBUG),0)
 CFLAGS                  += -O2
@@ -203,6 +174,22 @@ CFLAGS                  += -DDEBUG -Og -ggdb
 CFLAGS                  += -fsanitize=address -fno-omit-frame-pointer
 endif
 endif
+endif
+
+CFLAGS                  += -pipe -std=gnu99 -Iinclude/ -IOpenCL/
+
+# LZMA
+ifeq ($(SYSTEM_LZMA_SDK),0)
+CFLAGS                  += -Ideps/lzma_sdk
+else
+CFLAGS                  += $(LZMA_SDK_INCLUDE)
+LDFLAGS                 += -llzmasdk
+endif
+
+# brain and xxHash
+ifeq ($(ENABLE_BRAIN),1)
+CFLAGS                  += -DWITH_BRAIN
+CFLAGS                  += -Ideps/git/xxHash
 endif
 
 ##
@@ -306,19 +293,15 @@ LFLAGS_CROSS_WIN64      += -Wl,--dynamicbase -Wl,--nxcompat
 LFLAGS_CROSS_WIN64      += -lpsapi
 LFLAGS_CROSS_WIN64      += -lws2_32
 
-CFLAGS_REMOVE_LZMA        := -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wundef
-
-CFLAGS_NATIVE_LZMA        := $(filter-out $(CFLAGS_REMOVE_LZMA),$(CFLAGS_NATIVE))
-CFLAGS_CROSS_LINUX32_LZMA := $(filter-out $(CFLAGS_REMOVE_LZMA),$(CFLAGS_CROSS_LINUX32))
-CFLAGS_CROSS_LINUX64_LZMA := $(filter-out $(CFLAGS_REMOVE_LZMA),$(CFLAGS_CROSS_LINUX64))
-CFLAGS_CROSS_WIN32_LZMA   := $(filter-out $(CFLAGS_REMOVE_LZMA),$(CFLAGS_CROSS_WIN32))
-CFLAGS_CROSS_WIN64_LZMA   := $(filter-out $(CFLAGS_REMOVE_LZMA),$(CFLAGS_CROSS_WIN64))
-
 ##
 ## Objects
 ##
 
 OBJS_ALL                := affinity autotune benchmark bitmap bitops combinator common convert cpt cpu_aes cpu_crc32 cpu_des cpu_md4 cpu_md5 cpu_sha1 cpu_sha256 debugfile dictstat dispatch dynloader event ext_ADL ext_nvapi ext_nvml ext_OpenCL ext_sysfs ext_lzma filehandling folder hashcat hashes hlfmt hwmon induct interface locking logfile loopback memory monitor mpsp opencl outfile_check outfile pidfile potfile restore rp rp_cpu rp_kernel_on_cpu rp_kernel_on_cpu_optimized selftest slow_candidates shared status stdout straight terminal thread timer tuningdb usage user_options wordlist
+
+ifeq ($(ENABLE_BRAIN),1)
+OBJS_ALL                += brain
+endif
 
 NATIVE_STATIC_OBJS      := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).NATIVE.STATIC.o)
 NATIVE_SHARED_OBJS      := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).NATIVE.SHARED.o)
@@ -328,6 +311,19 @@ LINUX_64_OBJS           := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).LINUX.64.o)
 
 WIN_32_OBJS             := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).WIN.32.o)
 WIN_64_OBJS             := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).WIN.64.o)
+
+ifeq ($(ENABLE_BRAIN),1)
+OBJS_XXHASH             := xxhash
+
+NATIVE_STATIC_OBJS      += $(foreach OBJ,$(OBJS_XXHASH),obj/$(OBJ).NATIVE.STATIC.o)
+NATIVE_SHARED_OBJS      += $(foreach OBJ,$(OBJS_XXHASH),obj/$(OBJ).NATIVE.SHARED.o)
+
+LINUX_32_OBJS           += $(foreach OBJ,$(OBJS_XXHASH),obj/$(OBJ).LINUX.32.o)
+LINUX_64_OBJS           += $(foreach OBJ,$(OBJS_XXHASH),obj/$(OBJ).LINUX.64.o)
+
+WIN_32_OBJS             += $(foreach OBJ,$(OBJS_XXHASH),obj/$(OBJ).WIN.32.o)
+WIN_64_OBJS             += $(foreach OBJ,$(OBJS_XXHASH),obj/$(OBJ).WIN.64.o)
+endif
 
 ifeq ($(SYSTEM_LZMA_SDK),0)
 OBJS_LZMA               := Alloc Lzma2Dec LzmaDec
@@ -477,12 +473,20 @@ obj/%.NATIVE.STATIC.o: src/%.c
 obj/%.NATIVE.SHARED.o: src/%.c
 	$(CC) -c $(CFLAGS_NATIVE) $< -o $@ -fpic
 
+ifeq ($(ENABLE_BRAIN),1)
+obj/%.NATIVE.STATIC.o: deps/git/xxHash/%.c
+	$(CC) -c $(CFLAGS_NATIVE) $< -o $@
+
+obj/%.NATIVE.SHARED.o: deps/git/xxHash/%.c
+	$(CC) -c $(CFLAGS_NATIVE) $< -o $@ -fpic
+endif
+
 ifeq ($(SYSTEM_LZMA_SDK),0)
 obj/%.NATIVE.STATIC.o: deps/lzma_sdk/%.c
-	$(CC) -c $(CFLAGS_NATIVE_LZMA) $< -o $@
+	$(CC) -c $(CFLAGS_NATIVE) $< -o $@
 
 obj/%.NATIVE.SHARED.o: deps/lzma_sdk/%.c
-	$(CC) -c $(CFLAGS_NATIVE_LZMA) $< -o $@ -fpic
+	$(CC) -c $(CFLAGS_NATIVE) $< -o $@ -fpic
 endif
 
 ifeq ($(UNAME),Darwin)
@@ -517,18 +521,32 @@ obj/%.WIN.32.o:   src/%.c
 obj/%.WIN.64.o:   src/%.c
 	$(CC_WIN_64)   $(CFLAGS_CROSS_WIN64)   -c -o $@ $<
 
+ifeq ($(ENABLE_BRAIN),1)
+obj/%.LINUX.32.o: deps/git/xxHash/%.c
+	$(CC_LINUX_32) $(CFLAGS_CROSS_LINUX32) -c -o $@ $<
+
+obj/%.LINUX.64.o: deps/git/xxHash/%.c
+	$(CC_LINUX_64) $(CFLAGS_CROSS_LINUX64) -c -o $@ $<
+
+obj/%.WIN.32.o:   deps/git/xxHash/%.c
+	$(CC_WIN_32)   $(CFLAGS_CROSS_WIN32)   -c -o $@ $<
+
+obj/%.WIN.64.o:   deps/git/xxHash/%.c
+	$(CC_WIN_64)   $(CFLAGS_CROSS_WIN64)   -c -o $@ $<
+endif
+
 ifeq ($(SYSTEM_LZMA_SDK),0)
 obj/%.LINUX.32.o: deps/lzma_sdk/%.c
-	$(CC_LINUX_32) $(CFLAGS_CROSS_LINUX32_LZMA) -c -o $@ $<
+	$(CC_LINUX_32) $(CFLAGS_CROSS_LINUX32) -c -o $@ $<
 
 obj/%.LINUX.64.o: deps/lzma_sdk/%.c
-	$(CC_LINUX_64) $(CFLAGS_CROSS_LINUX64_LZMA) -c -o $@ $<
+	$(CC_LINUX_64) $(CFLAGS_CROSS_LINUX64) -c -o $@ $<
 
 obj/%.WIN.32.o:   deps/lzma_sdk/%.c
-	$(CC_WIN_32)   $(CFLAGS_CROSS_WIN32_LZMA)   -c -o $@ $<
+	$(CC_WIN_32)   $(CFLAGS_CROSS_WIN32)   -c -o $@ $<
 
 obj/%.WIN.64.o:   deps/lzma_sdk/%.c
-	$(CC_WIN_64)   $(CFLAGS_CROSS_WIN64_LZMA)   -c -o $@ $<
+	$(CC_WIN_64)   $(CFLAGS_CROSS_WIN64)   -c -o $@ $<
 endif
 
 hashcat32.bin: src/main.c $(LINUX_32_OBJS)

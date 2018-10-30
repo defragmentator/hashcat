@@ -1,4 +1,4 @@
-hashcat v4.2.1
+hashcat v5.0.0
 ==============
 
 AMD GPUs on Linux require "RadeonOpenCompute (ROCm)" Software Platform (1.6.180 or later)
@@ -21,6 +21,7 @@ NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
 - Multi-Hash (Cracking multiple hashes at the same time)
 - Multi-Devices (Utilizing multiple devices in same system)
 - Multi-Device-Types (Utilizing mixed device types in same system)
+- Supports password candidate brain functionality
 - Supports distributed cracking networks (using overlay)
 - Supports interactive pause / resume
 - Supports sessions
@@ -41,11 +42,18 @@ NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
 - MD5
 - Half MD5
 - SHA1
-- SHA-224
-- SHA-256
-- SHA-384
-- SHA-512
-- SHA-3 (Keccak)
+- SHA2-224
+- SHA2-256
+- SHA2-384
+- SHA2-512
+- SHA3-224
+- SHA3-256
+- SHA3-384
+- SHA3-512
+- Keccak-224
+- Keccak-256
+- Keccak-384
+- Keccak-512
 - BLAKE2b-512
 - SipHash
 - RIPEMD-160
