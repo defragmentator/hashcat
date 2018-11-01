@@ -61,7 +61,7 @@ my $hashcat = "./hashcat";
 
 my $MAX_LEN = 55;
 
-my @modes = (0, 10, 11, 12, 20, 21, 22, 23, 30, 40, 50, 60, 100, 101, 110, 111, 112, 120, 121, 122, 125, 130, 131, 132, 133, 140, 141, 150, 160, 200, 300, 400, 500, 600, 900, 1000, 1100, 1300, 1400, 1410, 1411, 1420, 1430, 1440, 1441, 1450, 1460, 1500, 1600, 1700, 1710, 1711, 1720, 1730, 1740, 1722, 1731, 1750, 1760, 1800, 2100, 2400, 2410, 2500, 2600, 2611, 2612, 2711, 2811, 3000, 3100, 3200, 3710, 3711, 3300, 3500, 3610, 3720, 3800, 3910, 4010, 4110, 4210, 4300, 4400, 4500, 4520, 4521, 4522, 4600, 4700, 4800, 4900, 5100, 5300, 5400, 5500, 5600, 5700, 5800, 6000, 6100, 6300, 6400, 6500, 6600, 6700, 6800, 6900, 7000, 7100, 7200, 7300, 7400, 7500, 7700, 7701, 7800, 7801, 7900, 8000, 8100, 8200, 8300, 8400, 8500, 8600, 8700, 8900, 9100, 9200, 9300, 9400, 9500, 9600, 9700, 9800, 9900, 10000, 10100, 10200, 10300, 10400, 10500, 10600, 10700, 10800, 10900, 11000, 11100, 11200, 11300, 11400, 11500, 11600, 11700, 11800, 11900, 12000, 12001, 12100, 12200, 12300, 12400, 12600, 12700, 12800, 12900, 13000, 13100, 13200, 13300, 13400, 13500, 13600, 13800, 13900, 14000, 14100, 14400, 14700, 14800, 14900, 15000, 15100, 15200, 15300, 15400, 15500, 15600, 15700, 15900, 16000, 16100, 16200, 16300, 16400, 16500, 16600, 16700, 16800, 16900, 17300, 17400, 17500, 17600, 17700, 17800, 17900, 18000, 18100, 99999);
+my @modes = (0, 10, 11, 12, 20, 21, 22, 23, 30, 40, 50, 60, 100, 101, 110, 111, 112, 120, 121, 122, 125, 130, 131, 132, 133, 140, 141, 150, 160, 200, 300, 400, 500, 600, 900, 1000, 1100, 1300, 1400, 1410, 1411, 1420, 1430, 1440, 1441, 1450, 1460, 1500, 1600, 1700, 1710, 1711, 1720, 1730, 1740, 1722, 1731, 1750, 1760, 1800, 2100, 2400, 2410, 2500, 2600, 2611, 2612, 2711, 2811, 3000, 3100, 3200, 3710, 3711, 3300, 3500, 3610, 3720, 3800, 3910, 4010, 4110, 4210, 4300, 4400, 4500, 4520, 4521, 4522, 4600, 4700, 4800, 4900, 5100, 5300, 5400, 5500, 5600, 5700, 5800, 6000, 6100, 6300, 6400, 6500, 6600, 6700, 6800, 6900, 7000, 7100, 7200, 7300, 7400, 7500, 7700, 7701, 7800, 7801, 7900, 8000, 8100, 8200, 8300, 8400, 8500, 8600, 8700, 8900, 9100, 9200, 9300, 9400, 9500, 9600, 9700, 9800, 9900, 10000, 10100, 10200, 10300, 10400, 10500, 10600, 10700, 10800, 10900, 11000, 11100, 11200, 11300, 11400, 11500, 11600, 11700, 11800, 11850, 11900, 12000, 12001, 12100, 12200, 12300, 12400, 12600, 12700, 12800, 12900, 13000, 13100, 13200, 13300, 13400, 13500, 13600, 13800, 13900, 14000, 14100, 14400, 14700, 14800, 14900, 15000, 15100, 15200, 15300, 15400, 15500, 15600, 15700, 15900, 16000, 16100, 16200, 16300, 16400, 16500, 16600, 16700, 16800, 16900, 17300, 17400, 17500, 17600, 17700, 17800, 17900, 18000, 18100, 18200, 99999);
 
 my %is_utf16le      = map { $_ => 1 } qw (30 40 130 131 132 133 140 141 1000 1100 1430 1440 1441 1730 1740 1731 5500 5600 8000 9400 9500 9600 9700 9800 11600 13500 13800);
 my %less_fifteen    = map { $_ => 1 } qw (500 1600 1800 3200 6300 7400 10500 10700);
@@ -242,7 +242,7 @@ sub verify
       $word = substr ($line, $index + 1);
     }
     # hash:salt
-    elsif ($mode == 10 || $mode == 11 || $mode == 12 || $mode == 20 || $mode == 21 || $mode == 22 || $mode == 23 || $mode == 30 || $mode == 40 || $mode == 50 || $mode == 60 || $mode == 110 || $mode == 112 || $mode == 120 || $mode == 121 || $mode == 130 || $mode == 140 || $mode == 150 || $mode == 160 || $mode == 1100 || $mode == 1410 || $mode == 1420 || $mode == 1430 || $mode == 1440 || $mode == 1450 || $mode == 1460 || $mode == 1710 || $mode == 1720 || $mode == 1730 || $mode == 1740 || $mode == 1750 || $mode == 1760 || $mode == 2410 || $mode == 2611 || $mode == 2711 || $mode == 2811 || $mode == 3100 || $mode == 3610 || $mode == 3710 || $mode == 3720 || $mode == 3800 || $mode == 3910 || $mode == 4010 || $mode == 4110 || $mode == 4210 || $mode == 4520 || $mode == 4521 || $mode == 4522 || $mode == 4900 || $mode == 5800 || $mode == 8400 || $mode == 11000 || $mode == 12600 || $mode == 13500 || $mode == 13800 || $mode == 13900 || $mode == 14000 || $mode == 14100 || $mode == 14400 || $mode == 14900 || $mode == 15000 || $mode == 18100)
+    elsif ($mode == 10 || $mode == 11 || $mode == 12 || $mode == 20 || $mode == 21 || $mode == 22 || $mode == 23 || $mode == 30 || $mode == 40 || $mode == 50 || $mode == 60 || $mode == 110 || $mode == 112 || $mode == 120 || $mode == 121 || $mode == 130 || $mode == 140 || $mode == 150 || $mode == 160 || $mode == 1100 || $mode == 1410 || $mode == 1420 || $mode == 1430 || $mode == 1440 || $mode == 1450 || $mode == 1460 || $mode == 1710 || $mode == 1720 || $mode == 1730 || $mode == 1740 || $mode == 1750 || $mode == 1760 || $mode == 2410 || $mode == 2611 || $mode == 2711 || $mode == 2811 || $mode == 3100 || $mode == 3610 || $mode == 3710 || $mode == 3720 || $mode == 3800 || $mode == 3910 || $mode == 4010 || $mode == 4110 || $mode == 4210 || $mode == 4520 || $mode == 4521 || $mode == 4522 || $mode == 4900 || $mode == 5800 || $mode == 8400 || $mode == 11000 || $mode == 11850 || $mode == 12600 || $mode == 13500 || $mode == 13800 || $mode == 13900 || $mode == 14000 || $mode == 14100 || $mode == 14400 || $mode == 14900 || $mode == 15000 || $mode == 18100)
     {
       # get hash
       my $index1 = index ($line, ":");
@@ -3000,6 +3000,36 @@ sub verify
 
       next unless (exists ($db->{$hash_in}) and (! defined ($db->{$hash_in})));
     }
+    elsif ($mode == 18200)
+    {
+      ($hash_in, $word) = split ":", $line;
+
+      next unless defined $hash_in;
+      next unless defined $word;
+
+      my @data = split ('\$', $hash_in);
+
+      next unless scalar @data == 8;
+
+      shift @data;
+
+      my $signature            = shift @data;
+      my $algorithm            = shift @data;
+      my $user_principal_name  = shift @data;
+      my $checksum             = shift @data;
+      my $edata2               = shift @data;
+
+      next unless ($signature eq "krb5asrep");
+      next unless (length ($checksum) == 32);
+      next unless (length ($edata2) >= 64);
+
+      $salt = $user_principal_name;
+
+      $param  = $checksum;
+      $param2 = $edata2;
+
+      next unless (exists ($db->{$hash_in}) and (! defined ($db->{$hash_in})));
+    }
     else
     {
       print "ERROR: hash mode is not supported\n";
@@ -3471,6 +3501,14 @@ sub verify
 
       return unless (substr ($line, 0, $len) eq $hash_out);
     }
+    elsif ($mode == 18200)
+    {
+      $hash_out = gen_hash ($mode, $word, $salt, $iter, $param, $param2);
+
+      $len = length $hash_out;
+
+      return unless (substr ($line, 0, $len) eq $hash_out);
+    }
     else
     {
       $hash_out = gen_hash ($mode, $word, $salt, $iter);
@@ -3554,7 +3592,7 @@ sub passthrough
     {
       $tmp_hash = gen_hash ($mode, $word_buf, "");
     }
-    elsif ($mode == 10 || $mode == 20 || $mode == 23 || $mode == 30 || $mode == 40 || $mode == 50 || $mode == 60 || $mode == 110 || $mode == 120 || $mode == 130 || $mode == 140 || $mode == 150 || $mode == 160 || $mode == 1410 || $mode == 1411 || $mode == 1420 || $mode == 1430 || $mode == 1440 || $mode == 1450 || $mode == 1460 || $mode == 1710 || $mode == 1711 || $mode == 1720 || $mode == 1730 || $mode == 1740 || $mode == 1750 || $mode == 1760 || $mode == 3610 || $mode == 3710 || $mode == 3711 || $mode == 3720 || $mode == 3800 || $mode == 3910 || $mode == 4010 || $mode == 4110 || $mode == 4210 || $mode == 4900 || $mode == 8900 || $mode == 10000 || $mode == 10200 || $mode == 10900 || $mode == 11900 || $mode == 12000 || $mode == 12100 || $mode == 18100)
+    elsif ($mode == 10 || $mode == 20 || $mode == 23 || $mode == 30 || $mode == 40 || $mode == 50 || $mode == 60 || $mode == 110 || $mode == 120 || $mode == 130 || $mode == 140 || $mode == 150 || $mode == 160 || $mode == 1410 || $mode == 1411 || $mode == 1420 || $mode == 1430 || $mode == 1440 || $mode == 1450 || $mode == 1460 || $mode == 1710 || $mode == 1711 || $mode == 1720 || $mode == 1730 || $mode == 1740 || $mode == 1750 || $mode == 1760 || $mode == 3610 || $mode == 3710 || $mode == 3711 || $mode == 3720 || $mode == 3800 || $mode == 3910 || $mode == 4010 || $mode == 4110 || $mode == 4210 || $mode == 4900 || $mode == 8900 || $mode == 10000 || $mode == 10200 || $mode == 10900 || $mode == 11850 || $mode == 11900 || $mode == 12000 || $mode == 12100 || $mode == 18100)
     {
       my $salt_len = get_random_num (1, 15);
 
@@ -4056,6 +4094,12 @@ sub passthrough
     {
       $tmp_hash = gen_hash ($mode, $word_buf, substr ($salt_buf, 0, 64));
     }
+    elsif ($mode == 18200)
+    {
+      $salt_buf = get_random_kerberos5_as_rep_salt ();
+
+      $tmp_hash = gen_hash ($mode, $word_buf, $salt_buf);
+    }
     else
     {
       print "ERROR: Unsupported hash type\n";
@@ -4094,7 +4138,7 @@ sub single
         }
       }
     }
-    elsif ($mode == 10 || $mode == 20 || $mode == 23 || $mode == 30 || $mode == 40 || $mode == 50 || $mode == 60 || $mode == 110 || $mode == 120 || $mode == 121 || $mode == 130 || $mode == 140 || $mode == 150 || $mode == 160 || $mode == 1410 || $mode == 1411 || $mode == 1420 || $mode == 1430 || $mode == 1440 || $mode == 1450 || $mode == 1460 || $mode == 1710 || $mode == 1711 || $mode == 1720 || $mode == 1730 || $mode == 1740 || $mode == 1750 || $mode == 1760 || $mode == 3610 || $mode == 3710 || $mode == 3711 || $mode == 3720 || $mode == 3910 || $mode == 4010 || $mode == 4110 || $mode == 4210 || $mode == 8900 || $mode == 10000 || $mode == 10200 || $mode == 10900 || $mode == 11900 || $mode == 12000 || $mode == 12100 || $mode == 16500 || $mode == 18100)
+    elsif ($mode == 10 || $mode == 20 || $mode == 23 || $mode == 30 || $mode == 40 || $mode == 50 || $mode == 60 || $mode == 110 || $mode == 120 || $mode == 121 || $mode == 130 || $mode == 140 || $mode == 150 || $mode == 160 || $mode == 1410 || $mode == 1411 || $mode == 1420 || $mode == 1430 || $mode == 1440 || $mode == 1450 || $mode == 1460 || $mode == 1710 || $mode == 1711 || $mode == 1720 || $mode == 1730 || $mode == 1740 || $mode == 1750 || $mode == 1760 || $mode == 3610 || $mode == 3710 || $mode == 3711 || $mode == 3720 || $mode == 3910 || $mode == 4010 || $mode == 4110 || $mode == 4210 || $mode == 8900 || $mode == 10000 || $mode == 10200 || $mode == 10900 || $mode == 11850 || $mode == 11900 || $mode == 12000 || $mode == 12100 || $mode == 16500 || $mode == 18100)
     {
       my $salt_len = get_random_num (1, 15);
 
@@ -5185,6 +5229,20 @@ sub single
         else
         {
           rnd ($mode, $i, 64);
+        }
+      }
+    }
+    elsif ($mode == 18200)
+    {
+      for (my $i = 1; $i < 27; $i++)
+      {
+        if ($len != 0)
+        {
+          rnd ($mode, $len, 16);
+        }
+        else
+        {
+          rnd ($mode, $i, 16);
         }
       }
     }
@@ -7849,6 +7907,9 @@ sub gen_hash
   }
   elsif ($mode == 11700)
   {
+    # PyGOST outputs digests in little-endian order, while the kernels
+    # expect them in big-endian; hence the digest[::-1] mirroring.
+    # Using sys.stdout.write instead of print to disable \n character.
     my $python_code = <<"END_CODE";
 
 import binascii
@@ -7874,6 +7935,27 @@ sys.stdout.write(binascii.hexlify(digest[::-1]))
 END_CODE
 
     $tmp_hash = `python2 -c '$python_code'`;
+  }
+  elsif ($mode == 11850)
+  {
+    #todo: python hmac; look at salt value?
+    #$hash_buf = hmac_hex ($salt_buf, $word_buf, \&sha512, 128);
+    #$tmp_hash = sprintf ("%s:%s", $hash_buf, $salt_buf);
+    my $python_code = <<"END_CODE";
+
+import binascii
+import hmac
+import sys
+from pygost import gost34112012512
+key    = b"$word_buf"
+msg    = b"$salt_buf"
+digest = hmac.new(key, msg, gost34112012512).digest()
+sys.stdout.write(binascii.hexlify(digest[::-1]))
+
+END_CODE
+
+    $hash_buf = `python2 -c '$python_code'`;
+    $tmp_hash = sprintf ("%s:%s", $hash_buf, $salt_buf);
   }
   elsif ($mode == 11900)
   {
@@ -10019,6 +10101,71 @@ END_CODE
     ## token must be leading zero padded, and salt leading zero stripped
     $tmp_hash = sprintf ("%06d:%d", $token, int ($salt_buf));
   }
+  elsif ($mode == 18200)
+  {
+    my @salt_arr = split (':', $salt_buf);
+
+    my $user_principal_name = $salt_arr[0];
+
+    my $k = md4 (encode ("UTF-16LE", $word_buf));
+
+    my $k1 = hmac_md5 ("\x08\x00\x00\x00", $k);
+
+    my $cleartext_ticket = '7981df3081dca01b3019a003020117a112041071e026814da2' .
+    '3f129f0e67a01b73f79aa11c301a3018a003020100a111180f32303138313033303039353' .
+    '831365aa206020460fdc6caa311180f32303337303931343032343830355aa40703050050' .
+    'c10000a511180f32303138313033303039353831365aa611180f323031383130333030393' .
+    '53831365aa711180f32303138313033303139353831365aa811180f323031383130333131' .
+    '30303433385aa90d1b0b545952454c4c2e434f5250aa20301ea003020101a11730151b066' .
+    'b72627467741b0b545952454c4c2e434f5250';
+    my $checksum = "";
+
+    if (defined $additional_param)
+    {
+      $checksum = pack ("H*", $additional_param);
+    }
+    else
+    {
+      my $nonce = $salt_arr[1];
+
+      $cleartext_ticket = $nonce . $cleartext_ticket;
+
+      $checksum = hmac_md5 (pack ("H*", $cleartext_ticket), $k1);
+    }
+
+    my $k3 = hmac_md5 ($checksum, $k1);
+
+    my $edata2 = "";
+
+    if (defined $additional_param2)
+    {
+      $edata2 = $additional_param2;
+
+      my $cipher_decrypt = Crypt::RC4->new ($k3);
+
+      my $ticket_decrypt = unpack ("H*", $cipher_decrypt->RC4 (pack ("H*", $edata2)));
+
+      my $check_correct  = ((substr ($ticket_decrypt, 16, 4) eq "7981" && substr ($ticket_decrypt, 22, 2) eq "30")) ||
+                           ((substr ($ticket_decrypt, 16, 2) eq "79") && (substr ($ticket_decrypt, 20, 2) eq "30")) ||
+                           ((substr ($ticket_decrypt, 16, 4) eq "7982")  && (substr ($ticket_decrypt, 24, 2) eq "30"));
+
+      if ($check_correct == 1)
+      {
+        $cleartext_ticket = $ticket_decrypt;
+      }
+      else # validation failed
+      {
+        # fake/wrong ticket (otherwise if we just decrypt/encrypt we end up with false positives all the time)
+        $cleartext_ticket = "0" x (length ($cleartext_ticket) + 16);
+      }
+    }
+
+    my $cipher = Crypt::RC4->new ($k3);
+
+    $edata2 = $cipher->RC4 (pack ("H*", $cleartext_ticket));
+
+    $tmp_hash = sprintf ('$krb5asrep$23$%s:%s$%s', $user_principal_name, unpack ("H*", $checksum), unpack ("H*", $edata2));
+  }
   elsif ($mode == 99999)
   {
     $tmp_hash = sprintf ("%s", $word_buf);
@@ -10169,6 +10316,10 @@ sub rnd
   {
     $salt_buf = get_random_jwt_salt ();
   }
+  elsif ($mode == 18200)
+  {
+    $salt_buf = get_random_kerberos5_as_rep_salt ();
+  }  
   else
   {
     my @salt_arr;
@@ -11450,6 +11601,16 @@ sub get_random_kerberos5_tgs_salt
   my $spn   = "test/spn";
 
   my $salt_buf = $user . "\$" . $realm . "\$" . $spn . "\$" . unpack ("H*", $nonce);
+
+  return $salt_buf;
+}
+
+sub get_random_kerberos5_as_rep_salt
+{
+  my $nonce = randbytes (8);
+
+  my $user_principal_name  = "user\@domain.com";
+  my $salt_buf = $user_principal_name . ":" . unpack ("H*", $nonce);
 
   return $salt_buf;
 }

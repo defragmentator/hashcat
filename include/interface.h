@@ -284,6 +284,15 @@ typedef struct krb5tgs
 
 } krb5tgs_t;
 
+typedef struct krb5asrep
+{
+  u32 account_info[512];
+  u32 checksum[4];
+  u32 edata2[5120];
+  u32 edata2_len;
+
+} krb5asrep_t;
+
 typedef struct keepass
 {
   u32 version;
@@ -1084,8 +1093,8 @@ typedef enum hash_type
   HASH_TYPE_PBKDF2_SHA256       = 39,
   HASH_TYPE_BITCOIN_WALLET      = 40,
   HASH_TYPE_CRC32               = 41,
-  HASH_TYPE_GOST_2012SBOG_256   = 42,
-  HASH_TYPE_GOST_2012SBOG_512   = 43,
+  HASH_TYPE_STREEBOG_256        = 42,
+  HASH_TYPE_STREEBOG_512        = 43,
   HASH_TYPE_PBKDF2_MD5          = 44,
   HASH_TYPE_PBKDF2_SHA1         = 45,
   HASH_TYPE_PBKDF2_SHA512       = 46,
@@ -1113,6 +1122,7 @@ typedef enum hash_type
   HASH_TYPE_WPA_PMKID_PBKDF2    = 68,
   HASH_TYPE_WPA_PMKID_PMK       = 69,
   HASH_TYPE_ANSIBLE_VAULT       = 70,
+  HASH_TYPE_KRB5ASREP           = 71,
 
 } hash_type_t;
 
@@ -1260,8 +1270,9 @@ typedef enum kern_type
   KERN_TYPE_SIP_AUTH                = 11400,
   KERN_TYPE_CRC32                   = 11500,
   KERN_TYPE_SEVEN_ZIP               = 11600,
-  KERN_TYPE_GOST_2012SBOG_256       = 11700,
-  KERN_TYPE_GOST_2012SBOG_512       = 11800,
+  KERN_TYPE_STREEBOG_256            = 11700,
+  KERN_TYPE_STREEBOG_512            = 11800,
+  KERN_TYPE_HMAC_STREEBOG_512_PW    = 11850,
   KERN_TYPE_PBKDF2_MD5              = 11900,
   KERN_TYPE_PBKDF2_SHA1             = 12000,
   KERN_TYPE_ECRYPTFS                = 12200,
@@ -1331,6 +1342,7 @@ typedef enum kern_type
   KERN_TYPE_KECCAK_384              = 17900,
   KERN_TYPE_KECCAK_512              = 18000,
   KERN_TYPE_TOTP_HMACSHA1           = 18100,
+  KERN_TYPE_KRB5ASREP               = 18200,
   KERN_TYPE_PLAINTEXT               = 99999,
 
 } kern_type_t;
@@ -1490,6 +1502,7 @@ int sha512grub_parse_hash         (u8 *input_buf, u32 input_len, hash_t *hash_bu
 int sha512b64s_parse_hash         (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int krb5pa_parse_hash             (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int krb5tgs_parse_hash            (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
+int krb5asrep_parse_hash          (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int sapb_parse_hash               (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int sapg_parse_hash               (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int drupal7_parse_hash            (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
@@ -1547,8 +1560,8 @@ int bitcoin_wallet_parse_hash     (u8 *input_buf, u32 input_len, hash_t *hash_bu
 int sip_auth_parse_hash           (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int crc32_parse_hash              (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int seven_zip_parse_hash          (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
-int gost2012sbog_256_parse_hash   (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
-int gost2012sbog_512_parse_hash   (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
+int streebog_256_parse_hash       (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
+int streebog_512_parse_hash       (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int pbkdf2_md5_parse_hash         (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int pbkdf2_sha1_parse_hash        (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);
 int pbkdf2_sha512_parse_hash      (u8 *input_buf, u32 input_len, hash_t *hash_buf, MAYBE_UNUSED hashconfig_t *hashconfig);

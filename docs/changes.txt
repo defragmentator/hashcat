@@ -4,6 +4,7 @@
 ## Features
 ##
 
+- Added new option --stdin-timeout-abort which allows to set the time hashcat should wait for input in stdin mode before aborting
 
 ##
 ## Algorithms
@@ -11,17 +12,22 @@
 
 - Added pure kernels for hash-mode 11700 (Streebog-256)
 - Added pure kernels for hash-mode 11800 (Streebog-512)
+- Added hash-modes 18200 (Kerberos 5 AS-REP etype 23)
+- Added hash-mode 11850 (HMAC-Streebog-512 (key = $pass), big-endian)
 
 ##
 ## Improvements
 ##
 
 - Tests: Added hash-modes 11700 (Streebog-256) and 11800 (Streebog-512)
+- Tests: Added hash-mode 11850 (HMAC-Streebog-512 (key = $pass), big-endian)
 
 ##
 ## Bugs
 ##
 
+- Fixed missing call to WSAStartup() and client indexing in order to start the brain server on windows
+- Fixed endianness and invalid separator character in outfile format of hash-mode 16801 (WPA-PMKID-PMK)
 
 * changes v4.2.1 -> v5.0.0
 
