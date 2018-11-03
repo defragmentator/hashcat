@@ -2659,7 +2659,7 @@ void *brain_server_handle_client (void *p)
         break;
       }
 
-      if (hashes_cnt > passwords_max)
+      if ((brain_server_db_short->short_cnt + hashes_cnt) > passwords_max)
       {
         brain_logging (stderr, client_idx, "Too many passwords\n");
 
@@ -3285,6 +3285,10 @@ int brain_server (const char *listen_host, const int listen_port, const char *br
   hcfree (brain_server_client_options);
 
   close (server_fd);
+
+  #if defined (_WIN)
+  WSACleanup();
+  #endif
 
   return 0;
 }
