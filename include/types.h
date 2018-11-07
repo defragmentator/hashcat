@@ -92,6 +92,7 @@ typedef enum event_identifier
   EVENT_AUTOTUNE_STARTING         = 0x00000001,
   EVENT_BITMAP_INIT_POST          = 0x00000010,
   EVENT_BITMAP_INIT_PRE           = 0x00000011,
+  EVENT_BITMAP_FINAL_OVERFLOW     = 0x00000012,
   EVENT_CALCULATED_WORDS_BASE     = 0x00000020,
   EVENT_CRACKER_FINISHED          = 0x00000030,
   EVENT_CRACKER_HASH_CRACKED      = 0x00000031,
@@ -534,7 +535,7 @@ typedef enum user_options_defaults
   ATTACK_MODE              = ATTACK_MODE_STRAIGHT,
   BENCHMARK_ALL            = false,
   BENCHMARK                = false,
-  BITMAP_MAX               = 24,
+  BITMAP_MAX               = 18,
   BITMAP_MIN               = 16,
   #ifdef WITH_BRAIN
   BRAIN_CLIENT             = false,
@@ -559,6 +560,7 @@ typedef enum user_options_defaults
   KEEP_GUESSING            = false,
   KERNEL_ACCEL             = 0,
   KERNEL_LOOPS             = 0,
+  KERNEL_THREADS           = 0,
   KEYSPACE                 = false,
   LEFT                     = false,
   LIMIT                    = 0,
@@ -653,6 +655,7 @@ typedef enum user_options_map
   IDX_KEEP_GUESSING             = 0xff1b,
   IDX_KERNEL_ACCEL              = 'n',
   IDX_KERNEL_LOOPS              = 'u',
+  IDX_KERNEL_THREADS            = 'T',
   IDX_KEYSPACE                  = 0xff1c,
   IDX_LEFT                      = 0xff1d,
   IDX_LIMIT                     = 'l',
@@ -899,10 +902,10 @@ struct hashconfig
 
   // sizes have to be size_t
 
-  size_t  esalt_size;
-  size_t  hook_salt_size;
-  size_t  tmp_size;
-  size_t  hook_size;
+  u64  esalt_size;
+  u64  hook_salt_size;
+  u64  tmp_size;
+  u64  hook_size;
 
   // password length limit
 
@@ -1085,8 +1088,6 @@ typedef struct hc_device_param
   u64     kernel_local_mem_size_aux3;
   u64     kernel_local_mem_size_aux4;
 
-  u32     kernel_threads;
-
   u32     kernel_accel;
   u32     kernel_accel_prev;
   u32     kernel_accel_min;
@@ -1097,36 +1098,37 @@ typedef struct hc_device_param
   u32     kernel_loops_max;
   u32     kernel_loops_min_sav; // the _sav are required because each -i iteration
   u32     kernel_loops_max_sav; // needs to recalculate the kernel_loops_min/max based on the current amplifier count
+  u32     kernel_threads;
 
   u64     kernel_power;
   u64     hardware_power;
 
-  size_t  size_pws;
-  size_t  size_pws_amp;
-  size_t  size_pws_comp;
-  size_t  size_pws_idx;
-  size_t  size_pws_pre;
-  size_t  size_pws_base;
-  size_t  size_tmps;
-  size_t  size_hooks;
-  size_t  size_bfs;
-  size_t  size_combs;
-  size_t  size_rules;
-  size_t  size_rules_c;
-  size_t  size_root_css;
-  size_t  size_markov_css;
-  size_t  size_digests;
-  size_t  size_salts;
-  size_t  size_shown;
-  size_t  size_results;
-  size_t  size_plains;
-  size_t  size_st_digests;
-  size_t  size_st_salts;
-  size_t  size_st_esalts;
+  u64  size_pws;
+  u64  size_pws_amp;
+  u64  size_pws_comp;
+  u64  size_pws_idx;
+  u64  size_pws_pre;
+  u64  size_pws_base;
+  u64  size_tmps;
+  u64  size_hooks;
+  u64  size_bfs;
+  u64  size_combs;
+  u64  size_rules;
+  u64  size_rules_c;
+  u64  size_root_css;
+  u64  size_markov_css;
+  u64  size_digests;
+  u64  size_salts;
+  u64  size_shown;
+  u64  size_results;
+  u64  size_plains;
+  u64  size_st_digests;
+  u64  size_st_salts;
+  u64  size_st_esalts;
 
   #ifdef WITH_BRAIN
-  size_t  size_brain_link_in;
-  size_t  size_brain_link_out;
+  u64  size_brain_link_in;
+  u64  size_brain_link_out;
 
   int           brain_link_client_fd;
   link_speed_t  brain_link_recv_speed;
@@ -1683,6 +1685,7 @@ typedef struct user_options
   bool         increment_min_chgd;
   bool         kernel_accel_chgd;
   bool         kernel_loops_chgd;
+  bool         kernel_threads_chgd;
   bool         nonce_error_corrections_chgd;
   bool         nvidia_spin_damp_chgd;
   bool         opencl_vector_width_chgd;
@@ -1783,6 +1786,7 @@ typedef struct user_options
   u32          increment_min;
   u32          kernel_accel;
   u32          kernel_loops;
+  u32          kernel_threads;
   u32          markov_threshold;
   u32          nonce_error_corrections;
   u32          nvidia_spin_damp;
