@@ -16,6 +16,7 @@
 #include "inc_cipher_aes.cl"
 #include "inc_cipher_twofish.cl"
 #include "inc_cipher_serpent.cl"
+#include "inc_cipher_camellia.cl"
 #include "inc_cipher_kuznyechik.cl"
 
 #include "inc_truecrypt_keyfile.cl"
@@ -410,7 +411,7 @@ __kernel void m13751_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 
   if (verify_header_aes (esalt_bufs, ukey1, ukey2, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
   {
-    if (atomic_inc (&hashes_shown[digests_offset]) == 0)
+    if (atomic_inc (&hashes_shown[0]) == 0)
     {
       mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
     }
@@ -418,7 +419,7 @@ __kernel void m13751_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 
   if (verify_header_serpent (esalt_bufs, ukey1, ukey2) == 1)
   {
-    if (atomic_inc (&hashes_shown[digests_offset]) == 0)
+    if (atomic_inc (&hashes_shown[0]) == 0)
     {
       mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
     }
@@ -426,7 +427,15 @@ __kernel void m13751_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 
   if (verify_header_twofish (esalt_bufs, ukey1, ukey2) == 1)
   {
-    if (atomic_inc (&hashes_shown[digests_offset]) == 0)
+    if (atomic_inc (&hashes_shown[0]) == 0)
+    {
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+    }
+  }
+
+  if (verify_header_camellia (esalt_bufs, ukey1, ukey2) == 1)
+  {
+    if (atomic_inc (&hashes_shown[0]) == 0)
     {
       mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
     }
