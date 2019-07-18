@@ -5,13 +5,14 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_md5.cl"
+#endif
 
 DECLSPEC void hmac_md5_pad (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, u32x *opad)
 {
@@ -98,7 +99,7 @@ DECLSPEC void hmac_md5_run (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, 
   md5_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m00060_m04 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m00060_m04 (KERN_ATTR_BASIC ())
 {
   /**
    * modifier
@@ -153,8 +154,6 @@ __kernel void m00060_m04 (KERN_ATTR_BASIC ())
   salt_buf3[1] = salt_bufs[salt_pos].salt_buf[13];
   salt_buf3[2] = salt_bufs[salt_pos].salt_buf[14];
   salt_buf3[3] = salt_bufs[salt_pos].salt_buf[15];
-
-  const u32 salt_len = salt_bufs[salt_pos].salt_len;
 
   /**
    * pads
@@ -268,15 +267,15 @@ __kernel void m00060_m04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m00060_m08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m00060_m08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m00060_m16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m00060_m16 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m00060_s04 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m00060_s04 (KERN_ATTR_BASIC ())
 {
   /**
    * modifier
@@ -331,8 +330,6 @@ __kernel void m00060_s04 (KERN_ATTR_BASIC ())
   salt_buf3[1] = salt_bufs[salt_pos].salt_buf[13];
   salt_buf3[2] = salt_bufs[salt_pos].salt_buf[14];
   salt_buf3[3] = salt_bufs[salt_pos].salt_buf[15];
-
-  const u32 salt_len = salt_bufs[salt_pos].salt_len;
 
   /**
    * pads
@@ -458,10 +455,10 @@ __kernel void m00060_s04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m00060_s08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m00060_s08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m00060_s16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m00060_s16 (KERN_ATTR_BASIC ())
 {
 }

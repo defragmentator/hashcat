@@ -5,28 +5,29 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
+#endif
 
-#define SIPROUND(v0,v1,v2,v3) \
-  (v0) += (v1);               \
-  (v1)  = rotl64 ((v1), 13);  \
-  (v1) ^= (v0);               \
-  (v0)  = rotl64 ((v0), 32);  \
-  (v2) += (v3);               \
-  (v3)  = rotl64 ((v3), 16);  \
-  (v3) ^= (v2);               \
-  (v0) += (v3);               \
-  (v3)  = rotl64 ((v3), 21);  \
-  (v3) ^= (v0);               \
-  (v2) += (v1);               \
-  (v1)  = rotl64 ((v1), 17);  \
-  (v1) ^= (v2);               \
-  (v2)  = rotl64 ((v2), 32)
+#define SIPROUND(v0,v1,v2,v3)   \
+  (v0) += (v1);                 \
+  (v1)  = hc_rotl64 ((v1), 13); \
+  (v1) ^= (v0);                 \
+  (v0)  = hc_rotl64 ((v0), 32); \
+  (v2) += (v3);                 \
+  (v3)  = hc_rotl64 ((v3), 16); \
+  (v3) ^= (v2);                 \
+  (v0) += (v3);                 \
+  (v3)  = hc_rotl64 ((v3), 21); \
+  (v3) ^= (v0);                 \
+  (v2) += (v1);                 \
+  (v1)  = hc_rotl64 ((v1), 17); \
+  (v1) ^= (v2);                 \
+  (v2)  = hc_rotl64 ((v2), 32)
 
 DECLSPEC void m10100m (u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
 {
@@ -51,9 +52,13 @@ DECLSPEC void m10100m (u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
   v2p ^= hl32_to_64_S (salt_bufs[salt_pos].salt_buf[1], salt_bufs[salt_pos].salt_buf[0]);
   v3p ^= hl32_to_64_S (salt_bufs[salt_pos].salt_buf[3], salt_bufs[salt_pos].salt_buf[2]);
 
-  u64 *w_ptr = (u64 *) w;
-
-  w_ptr[pw_len / 8] |= (u64) pw_len << 56;
+  switch (pw_len / 8)
+  {
+    case 0: w[1] |= pw_len << 24; break;
+    case 1: w[3] |= pw_len << 24; break;
+    case 2: w[5] |= pw_len << 24; break;
+    case 3: w[7] |= pw_len << 24; break;
+  }
 
   /**
    * loop
@@ -141,9 +146,13 @@ DECLSPEC void m10100s (u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
   v2p ^= hl32_to_64_S (salt_bufs[salt_pos].salt_buf[1], salt_bufs[salt_pos].salt_buf[0]);
   v3p ^= hl32_to_64_S (salt_bufs[salt_pos].salt_buf[3], salt_bufs[salt_pos].salt_buf[2]);
 
-  u64 *w_ptr = (u64 *) w;
-
-  w_ptr[pw_len / 8] |= (u64) pw_len << 56;
+  switch (pw_len / 8)
+  {
+    case 0: w[1] |= pw_len << 24; break;
+    case 1: w[3] |= pw_len << 24; break;
+    case 2: w[5] |= pw_len << 24; break;
+    case 3: w[7] |= pw_len << 24; break;
+  }
 
   /**
    * digest
@@ -220,7 +229,7 @@ DECLSPEC void m10100s (u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
   }
 }
 
-__kernel void m10100_m04 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m10100_m04 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -246,7 +255,7 @@ __kernel void m10100_m04 (KERN_ATTR_VECTOR ())
   w[11] = 0;
   w[12] = 0;
   w[13] = 0;
-  w[14] = pws[gid].i[14];
+  w[14] = 0;
   w[15] = 0;
 
   const u32 pw_len = pws[gid].pw_len & 63;
@@ -258,7 +267,7 @@ __kernel void m10100_m04 (KERN_ATTR_VECTOR ())
   m10100m (w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m10100_m08 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m10100_m08 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -284,7 +293,7 @@ __kernel void m10100_m08 (KERN_ATTR_VECTOR ())
   w[11] = 0;
   w[12] = 0;
   w[13] = 0;
-  w[14] = pws[gid].i[14];
+  w[14] = 0;
   w[15] = 0;
 
   const u32 pw_len = pws[gid].pw_len & 63;
@@ -296,7 +305,7 @@ __kernel void m10100_m08 (KERN_ATTR_VECTOR ())
   m10100m (w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m10100_m16 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m10100_m16 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -334,7 +343,7 @@ __kernel void m10100_m16 (KERN_ATTR_VECTOR ())
   m10100m (w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m10100_s04 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m10100_s04 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -360,7 +369,7 @@ __kernel void m10100_s04 (KERN_ATTR_VECTOR ())
   w[11] = 0;
   w[12] = 0;
   w[13] = 0;
-  w[14] = pws[gid].i[14];
+  w[14] = 0;
   w[15] = 0;
 
   const u32 pw_len = pws[gid].pw_len & 63;
@@ -372,7 +381,7 @@ __kernel void m10100_s04 (KERN_ATTR_VECTOR ())
   m10100s (w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m10100_s08 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m10100_s08 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -398,7 +407,7 @@ __kernel void m10100_s08 (KERN_ATTR_VECTOR ())
   w[11] = 0;
   w[12] = 0;
   w[13] = 0;
-  w[14] = pws[gid].i[14];
+  w[14] = 0;
   w[15] = 0;
 
   const u32 pw_len = pws[gid].pw_len & 63;
@@ -410,7 +419,7 @@ __kernel void m10100_s08 (KERN_ATTR_VECTOR ())
   m10100s (w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m10100_s16 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m10100_s16 (KERN_ATTR_VECTOR ())
 {
   /**
    * base

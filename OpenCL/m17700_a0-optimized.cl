@@ -5,16 +5,17 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
+#endif
 
-__constant u64a keccakf_rndc[24] =
+CONSTANT_VK u64a keccakf_rndc[24] =
 {
   0x0000000000000001, 0x0000000000008082, 0x800000000000808a,
   0x8000000080008000, 0x000000000000808b, 0x0000000080000001,
@@ -30,7 +31,7 @@ __constant u64a keccakf_rndc[24] =
 #define KECCAK_ROUNDS 24
 #endif
 
-__kernel void m17700_m04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m17700_m04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -71,7 +72,7 @@ __kernel void m17700_m04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x01_2x4_VV (w0, w1, out_len);
 
@@ -107,7 +108,7 @@ __kernel void m17700_m04 (KERN_ATTR_RULES ())
 
     #define Rho_Pi(ad,r)     \
       bc0 = ad;              \
-      ad = rotl64 (t, r);    \
+      ad = hc_rotl64 (t, r);    \
       t = bc0;               \
 
     #ifdef _unroll
@@ -125,11 +126,11 @@ __kernel void m17700_m04 (KERN_ATTR_RULES ())
 
       u64x t;
 
-      t = bc4 ^ rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t; a40 ^= t;
-      t = bc0 ^ rotl64 (bc2, 1); a01 ^= t; a11 ^= t; a21 ^= t; a31 ^= t; a41 ^= t;
-      t = bc1 ^ rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t; a42 ^= t;
-      t = bc2 ^ rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
-      t = bc3 ^ rotl64 (bc0, 1); a04 ^= t; a14 ^= t; a24 ^= t; a34 ^= t; a44 ^= t;
+      t = bc4 ^ hc_rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t; a40 ^= t;
+      t = bc0 ^ hc_rotl64 (bc2, 1); a01 ^= t; a11 ^= t; a21 ^= t; a31 ^= t; a41 ^= t;
+      t = bc1 ^ hc_rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t; a42 ^= t;
+      t = bc2 ^ hc_rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
+      t = bc3 ^ hc_rotl64 (bc0, 1); a04 ^= t; a14 ^= t; a24 ^= t; a34 ^= t; a44 ^= t;
 
       // Rho Pi
 
@@ -192,11 +193,11 @@ __kernel void m17700_m04 (KERN_ATTR_RULES ())
 
     u64x t;
 
-    t = bc4 ^ rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t;
-    t = bc0 ^ rotl64 (bc2, 1);                     a21 ^= t; a31 ^= t; a41 ^= t;
-    t = bc1 ^ rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t;
-    t = bc2 ^ rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
-    t = bc3 ^ rotl64 (bc0, 1); a04 ^= t;                     a34 ^= t; a44 ^= t;
+    t = bc4 ^ hc_rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t;
+    t = bc0 ^ hc_rotl64 (bc2, 1);                     a21 ^= t; a31 ^= t; a41 ^= t;
+    t = bc1 ^ hc_rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t;
+    t = bc2 ^ hc_rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
+    t = bc3 ^ hc_rotl64 (bc0, 1); a04 ^= t;                     a34 ^= t; a44 ^= t;
 
     // Rho Pi
 
@@ -240,15 +241,15 @@ __kernel void m17700_m04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m17700_m08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m17700_m08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m17700_m16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m17700_m16 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m17700_s04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m17700_s04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -301,7 +302,7 @@ __kernel void m17700_s04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x01_2x4_VV (w0, w1, out_len);
 
@@ -337,7 +338,7 @@ __kernel void m17700_s04 (KERN_ATTR_RULES ())
 
     #define Rho_Pi(ad,r)     \
       bc0 = ad;              \
-      ad = rotl64 (t, r);    \
+      ad = hc_rotl64 (t, r);    \
       t = bc0;               \
 
     #ifdef _unroll
@@ -355,11 +356,11 @@ __kernel void m17700_s04 (KERN_ATTR_RULES ())
 
       u64x t;
 
-      t = bc4 ^ rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t; a40 ^= t;
-      t = bc0 ^ rotl64 (bc2, 1); a01 ^= t; a11 ^= t; a21 ^= t; a31 ^= t; a41 ^= t;
-      t = bc1 ^ rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t; a42 ^= t;
-      t = bc2 ^ rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
-      t = bc3 ^ rotl64 (bc0, 1); a04 ^= t; a14 ^= t; a24 ^= t; a34 ^= t; a44 ^= t;
+      t = bc4 ^ hc_rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t; a40 ^= t;
+      t = bc0 ^ hc_rotl64 (bc2, 1); a01 ^= t; a11 ^= t; a21 ^= t; a31 ^= t; a41 ^= t;
+      t = bc1 ^ hc_rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t; a42 ^= t;
+      t = bc2 ^ hc_rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
+      t = bc3 ^ hc_rotl64 (bc0, 1); a04 ^= t; a14 ^= t; a24 ^= t; a34 ^= t; a44 ^= t;
 
       // Rho Pi
 
@@ -422,11 +423,11 @@ __kernel void m17700_s04 (KERN_ATTR_RULES ())
 
     u64x t;
 
-    t = bc4 ^ rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t;
-    t = bc0 ^ rotl64 (bc2, 1);                     a21 ^= t; a31 ^= t; a41 ^= t;
-    t = bc1 ^ rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t;
-    t = bc2 ^ rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
-    t = bc3 ^ rotl64 (bc0, 1); a04 ^= t;                     a34 ^= t; a44 ^= t;
+    t = bc4 ^ hc_rotl64 (bc1, 1); a00 ^= t; a10 ^= t; a20 ^= t; a30 ^= t;
+    t = bc0 ^ hc_rotl64 (bc2, 1);                     a21 ^= t; a31 ^= t; a41 ^= t;
+    t = bc1 ^ hc_rotl64 (bc3, 1); a02 ^= t; a12 ^= t; a22 ^= t; a32 ^= t;
+    t = bc2 ^ hc_rotl64 (bc4, 1); a03 ^= t; a13 ^= t; a23 ^= t; a33 ^= t; a43 ^= t;
+    t = bc3 ^ hc_rotl64 (bc0, 1); a04 ^= t;                     a34 ^= t; a44 ^= t;
 
     // Rho Pi
 
@@ -470,10 +471,10 @@ __kernel void m17700_s04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m17700_s08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m17700_s08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m17700_s16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m17700_s16 (KERN_ATTR_RULES ())
 {
 }

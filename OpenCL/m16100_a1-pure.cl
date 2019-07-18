@@ -5,14 +5,26 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_md5.cl"
+#endif
 
-__kernel void m16100_mxx (KERN_ATTR_ESALT (tacacs_plus_t))
+typedef struct tacacs_plus
+{
+  u32 session_buf[16];
+
+  u32 ct_data_buf[64];
+  u32 ct_data_len;
+
+  u32 sequence_buf[16];
+
+} tacacs_plus_t;
+
+KERNEL_FQ void m16100_mxx (KERN_ATTR_ESALT (tacacs_plus_t))
 {
   /**
    * modifier
@@ -126,7 +138,7 @@ __kernel void m16100_mxx (KERN_ATTR_ESALT (tacacs_plus_t))
       {
         if (atomic_inc (&hashes_shown[digests_offset]) == 0)
         {
-          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
         }
       }
     }
@@ -144,7 +156,7 @@ __kernel void m16100_mxx (KERN_ATTR_ESALT (tacacs_plus_t))
       {
         if (atomic_inc (&hashes_shown[digests_offset]) == 0)
         {
-          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
         }
       }
     }
@@ -163,14 +175,14 @@ __kernel void m16100_mxx (KERN_ATTR_ESALT (tacacs_plus_t))
       {
         if (atomic_inc (&hashes_shown[digests_offset]) == 0)
         {
-          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
         }
       }
     }
   }
 }
 
-__kernel void m16100_sxx (KERN_ATTR_ESALT (tacacs_plus_t))
+KERNEL_FQ void m16100_sxx (KERN_ATTR_ESALT (tacacs_plus_t))
 {
   /**
    * modifier
@@ -284,7 +296,7 @@ __kernel void m16100_sxx (KERN_ATTR_ESALT (tacacs_plus_t))
       {
         if (atomic_inc (&hashes_shown[digests_offset]) == 0)
         {
-          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
         }
       }
     }
@@ -302,7 +314,7 @@ __kernel void m16100_sxx (KERN_ATTR_ESALT (tacacs_plus_t))
       {
         if (atomic_inc (&hashes_shown[digests_offset]) == 0)
         {
-          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
         }
       }
     }
@@ -321,7 +333,7 @@ __kernel void m16100_sxx (KERN_ATTR_ESALT (tacacs_plus_t))
       {
         if (atomic_inc (&hashes_shown[digests_offset]) == 0)
         {
-          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
         }
       }
     }

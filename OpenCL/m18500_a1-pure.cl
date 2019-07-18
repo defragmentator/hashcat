@@ -5,30 +5,31 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp.h"
 #include "inc_rp.cl"
 #include "inc_scalar.cl"
 #include "inc_hash_md5.cl"
 #include "inc_hash_sha1.cl"
-
-#if   VECT_SIZE == 1
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i)])
-#elif VECT_SIZE == 2
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
-#elif VECT_SIZE == 4
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
-#elif VECT_SIZE == 8
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
-#elif VECT_SIZE == 16
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
 #endif
 
-__kernel void m18500_mxx (KERN_ATTR_RULES ())
+#if   VECT_SIZE == 1
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i)])
+#elif VECT_SIZE == 2
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
+#elif VECT_SIZE == 4
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
+#elif VECT_SIZE == 8
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
+#elif VECT_SIZE == 16
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
+#endif
+
+KERNEL_FQ void m18500_mxx (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -38,7 +39,7 @@ __kernel void m18500_mxx (KERN_ATTR_RULES ())
   const u64 gid = get_global_id (0);
   const u64 lsz = get_local_size (0);
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -49,7 +50,7 @@ __kernel void m18500_mxx (KERN_ATTR_RULES ())
                  | ((i1 < 10) ? '0' + i1 : 'a' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -114,21 +115,21 @@ __kernel void m18500_mxx (KERN_ATTR_RULES ())
 
     sha1_init (&ctx2);
 
-    ctx2.w0[0] = swap32(uint_to_hex_lower8 ((e >>  0) & 255) <<  0
+    ctx2.w0[0] = hc_swap32(uint_to_hex_lower8 ((e >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((e >>  8) & 255) << 16);
-    ctx2.w0[1] = swap32(uint_to_hex_lower8 ((e >> 16) & 255) <<  0
+    ctx2.w0[1] = hc_swap32(uint_to_hex_lower8 ((e >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((e >> 24) & 255) << 16);
-    ctx2.w0[2] = swap32(uint_to_hex_lower8 ((f >>  0) & 255) <<  0
+    ctx2.w0[2] = hc_swap32(uint_to_hex_lower8 ((f >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((f >>  8) & 255) << 16);
-    ctx2.w0[3] = swap32(uint_to_hex_lower8 ((f >> 16) & 255) <<  0
+    ctx2.w0[3] = hc_swap32(uint_to_hex_lower8 ((f >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((f >> 24) & 255) << 16);
-    ctx2.w1[0] = swap32(uint_to_hex_lower8 ((g >>  0) & 255) <<  0
+    ctx2.w1[0] = hc_swap32(uint_to_hex_lower8 ((g >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((g >>  8) & 255) << 16);
-    ctx2.w1[1] = swap32(uint_to_hex_lower8 ((g >> 16) & 255) <<  0
+    ctx2.w1[1] = hc_swap32(uint_to_hex_lower8 ((g >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((g >> 24) & 255) << 16);
-    ctx2.w1[2] = swap32(uint_to_hex_lower8 ((h >>  0) & 255) <<  0
+    ctx2.w1[2] = hc_swap32(uint_to_hex_lower8 ((h >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((h >>  8) & 255) << 16);
-    ctx2.w1[3] = swap32(uint_to_hex_lower8 ((h >> 16) & 255) <<  0
+    ctx2.w1[3] = hc_swap32(uint_to_hex_lower8 ((h >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((h >> 24) & 255) << 16);
     ctx2.len = 32;
 
@@ -143,7 +144,7 @@ __kernel void m18500_mxx (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m18500_sxx (KERN_ATTR_RULES ())
+KERNEL_FQ void m18500_sxx (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -153,7 +154,7 @@ __kernel void m18500_sxx (KERN_ATTR_RULES ())
   const u64 gid = get_global_id (0);
   const u64 lsz = get_local_size (0);
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -164,7 +165,7 @@ __kernel void m18500_sxx (KERN_ATTR_RULES ())
                  | ((i1 < 10) ? '0' + i1 : 'a' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -241,21 +242,21 @@ __kernel void m18500_sxx (KERN_ATTR_RULES ())
 
     sha1_init (&ctx2);
 
-    ctx2.w0[0] = swap32(uint_to_hex_lower8 ((e >>  0) & 255) <<  0
+    ctx2.w0[0] = hc_swap32(uint_to_hex_lower8 ((e >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((e >>  8) & 255) << 16);
-    ctx2.w0[1] = swap32(uint_to_hex_lower8 ((e >> 16) & 255) <<  0
+    ctx2.w0[1] = hc_swap32(uint_to_hex_lower8 ((e >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((e >> 24) & 255) << 16);
-    ctx2.w0[2] = swap32(uint_to_hex_lower8 ((f >>  0) & 255) <<  0
+    ctx2.w0[2] = hc_swap32(uint_to_hex_lower8 ((f >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((f >>  8) & 255) << 16);
-    ctx2.w0[3] = swap32(uint_to_hex_lower8 ((f >> 16) & 255) <<  0
+    ctx2.w0[3] = hc_swap32(uint_to_hex_lower8 ((f >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((f >> 24) & 255) << 16);
-    ctx2.w1[0] = swap32(uint_to_hex_lower8 ((g >>  0) & 255) <<  0
+    ctx2.w1[0] = hc_swap32(uint_to_hex_lower8 ((g >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((g >>  8) & 255) << 16);
-    ctx2.w1[1] = swap32(uint_to_hex_lower8 ((g >> 16) & 255) <<  0
+    ctx2.w1[1] = hc_swap32(uint_to_hex_lower8 ((g >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((g >> 24) & 255) << 16);
-    ctx2.w1[2] = swap32(uint_to_hex_lower8 ((h >>  0) & 255) <<  0
+    ctx2.w1[2] = hc_swap32(uint_to_hex_lower8 ((h >>  0) & 255) <<  0
                       | uint_to_hex_lower8 ((h >>  8) & 255) << 16);
-    ctx2.w1[3] = swap32(uint_to_hex_lower8 ((h >> 16) & 255) <<  0
+    ctx2.w1[3] = hc_swap32(uint_to_hex_lower8 ((h >> 16) & 255) <<  0
                       | uint_to_hex_lower8 ((h >> 24) & 255) << 16);
     ctx2.len = 32;
 

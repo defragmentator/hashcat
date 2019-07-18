@@ -3,17 +3,24 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_sha1.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
-__constant u32a c_pc_dec[1024] =
+typedef struct androidpin_tmp
+{
+  u32 digest_buf[5];
+
+} androidpin_tmp_t;
+
+CONSTANT_VK u32a c_pc_dec[1024] =
 {
   0x00000030,
   0x00000031,
@@ -1041,7 +1048,7 @@ __constant u32a c_pc_dec[1024] =
   0x33323031,
 };
 
-__constant u32a c_pc_len[1024] =
+CONSTANT_VK u32a c_pc_len[1024] =
 {
   1,
   1,
@@ -2112,10 +2119,6 @@ DECLSPEC void append_salt (u32 *w0, u32 *w1, u32 *w2, const u32 *append, const u
   u32 tmp4;
   u32 tmp5;
 
-  const int offset_mod_4 = offset & 3;
-
-  const int offset_minus_4 = 4 - offset_mod_4;
-
   #if defined IS_AMD || defined IS_GENERIC
   u32 in0 = append[0];
   u32 in1 = append[1];
@@ -2132,6 +2135,10 @@ DECLSPEC void append_salt (u32 *w0, u32 *w1, u32 *w2, const u32 *append, const u
   #endif
 
   #ifdef IS_NV
+  const int offset_mod_4 = offset & 3;
+
+  const int offset_minus_4 = 4 - offset_mod_4;
+
   const int selector = (0x76543210 >> (offset_minus_4 * 4)) & 0xffff;
 
   u32 in0 = append[0];
@@ -2190,7 +2197,7 @@ DECLSPEC void append_salt (u32 *w0, u32 *w1, u32 *w2, const u32 *append, const u
   }
 }
 
-__kernel void m05800_init (KERN_ATTR_TMPS (androidpin_tmp_t))
+KERNEL_FQ void m05800_init (KERN_ATTR_TMPS (androidpin_tmp_t))
 {
   /**
    * base
@@ -2245,16 +2252,16 @@ __kernel void m05800_init (KERN_ATTR_TMPS (androidpin_tmp_t))
   u32 w2[4];
   u32 w3[4];
 
-  w0[0] = swap32_S (data0[0]);
-  w0[1] = swap32_S (data0[1]);
-  w0[2] = swap32_S (data0[2]);
-  w0[3] = swap32_S (data0[3]);
-  w1[0] = swap32_S (data1[0]);
-  w1[1] = swap32_S (data1[1]);
-  w1[2] = swap32_S (data1[2]);
-  w1[3] = swap32_S (data1[3]);
-  w2[0] = swap32_S (data2[0]);
-  w2[1] = swap32_S (data2[1]);
+  w0[0] = hc_swap32_S (data0[0]);
+  w0[1] = hc_swap32_S (data0[1]);
+  w0[2] = hc_swap32_S (data0[2]);
+  w0[3] = hc_swap32_S (data0[3]);
+  w1[0] = hc_swap32_S (data1[0]);
+  w1[1] = hc_swap32_S (data1[1]);
+  w1[2] = hc_swap32_S (data1[2]);
+  w1[3] = hc_swap32_S (data1[3]);
+  w2[0] = hc_swap32_S (data2[0]);
+  w2[1] = hc_swap32_S (data2[1]);
   w2[2] = 0;
   w2[3] = 0;
   w3[0] = 0;
@@ -2279,7 +2286,7 @@ __kernel void m05800_init (KERN_ATTR_TMPS (androidpin_tmp_t))
   tmps[gid].digest_buf[4] = digest[4];
 }
 
-__kernel void m05800_loop (KERN_ATTR_TMPS (androidpin_tmp_t))
+KERNEL_FQ void m05800_loop (KERN_ATTR_TMPS (androidpin_tmp_t))
 {
   /**
    * base
@@ -2293,8 +2300,8 @@ __kernel void m05800_loop (KERN_ATTR_TMPS (androidpin_tmp_t))
    * cache precomputed conversion table in shared memory
    */
 
-  __local u32 s_pc_dec[1024];
-  __local u32 s_pc_len[1024];
+  LOCAL_VK u32 s_pc_dec[1024];
+  LOCAL_VK u32 s_pc_len[1024];
 
   for (u32 i = lid; i < 1024; i += lsz)
   {
@@ -2302,7 +2309,7 @@ __kernel void m05800_loop (KERN_ATTR_TMPS (androidpin_tmp_t))
     s_pc_len[i] = c_pc_len[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -2370,15 +2377,15 @@ __kernel void m05800_loop (KERN_ATTR_TMPS (androidpin_tmp_t))
     w0[2] = digest[2];
     w0[3] = digest[3];
     w1[0] = digest[4];
-    w1[1] = swap32_S (data0[0]);
-    w1[2] = swap32_S (data0[1]);
-    w1[3] = swap32_S (data0[2]);
-    w2[0] = swap32_S (data0[3]);
-    w2[1] = swap32_S (data1[0]);
-    w2[2] = swap32_S (data1[1]);
-    w2[3] = swap32_S (data1[2]);
-    w3[0] = swap32_S (data1[3]);
-    w3[1] = swap32_S (data2[0]);
+    w1[1] = hc_swap32_S (data0[0]);
+    w1[2] = hc_swap32_S (data0[1]);
+    w1[3] = hc_swap32_S (data0[2]);
+    w2[0] = hc_swap32_S (data0[3]);
+    w2[1] = hc_swap32_S (data1[0]);
+    w2[2] = hc_swap32_S (data1[1]);
+    w2[3] = hc_swap32_S (data1[2]);
+    w3[0] = hc_swap32_S (data1[3]);
+    w3[1] = hc_swap32_S (data2[0]);
     w3[2] = 0;
     w3[3] = (20 + pc_len + pw_len + salt_len) * 8;
 
@@ -2398,7 +2405,7 @@ __kernel void m05800_loop (KERN_ATTR_TMPS (androidpin_tmp_t))
   tmps[gid].digest_buf[4] = digest[4];
 }
 
-__kernel void m05800_comp (KERN_ATTR_TMPS (androidpin_tmp_t))
+KERNEL_FQ void m05800_comp (KERN_ATTR_TMPS (androidpin_tmp_t))
 {
   /**
    * modifier
@@ -2421,5 +2428,7 @@ __kernel void m05800_comp (KERN_ATTR_TMPS (androidpin_tmp_t))
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

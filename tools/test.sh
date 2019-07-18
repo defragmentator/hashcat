@@ -5,7 +5,7 @@
 ## License.....: MIT
 ##
 
-OPTS="--quiet --potfile-disable --runtime 400 --hwmon-disable -O"
+OPTS="--quiet --potfile-disable --runtime 400 --hwmon-disable"
 
 TDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -15,20 +15,25 @@ TC_MODES="6211 6212 6213 6221 6222 6223 6231 6232 6233 6241 6242 6243"
 # List of VeraCrypt modes which have test containers
 VC_MODES="13711 13712 13713 13721 13722 13723 13731 13732 13733 13741 13742 13743 13751 13752 13753 13761 13762 13763 13771 13772 13773"
 
+# List of modes which either are OPTS_TYPE_PT_NEVERCRACK or produce collisions
+NEVER_CRACK="9720 9820 14900 18100"
+
+# List of modes which return a different output hash format than the input hash format
+NOCHECK_ENCODING="16800"
+
 # LUKS mode has test containers
 LUKS_MODE="14600"
 
 # missing hash types: 5200
 
-HASH_TYPES=$(ls ${TDIR}/test_modules/*.pm | sed 's/.*m0*\([0-9]\+\)\.pm/\1/')
+HASH_TYPES=$(ls ${TDIR}/test_modules/*.pm | sed -E 's/.*m0*([0-9]+).pm/\1/')
 HASH_TYPES="${HASH_TYPES} ${TC_MODES} ${VC_MODES} ${LUKS_MODE}"
 HASH_TYPES="$(echo -n ${HASH_TYPES} | tr ' ' '\n' | sort -u -n | tr '\n' ' ')"
 
 VECTOR_WIDTHS="1 2 4 8 16"
 
-HASHFILE_ONLY=$(grep -l OPTS_TYPE_BINARY_HASHFILE ${TDIR}/../src/modules/module_*.c | sed 's/.*module_0*\([0-9]\+\)\.c/\1/' | tr '\n' ' ')
-NEVER_CRACK=$(grep -l OPTS_TYPE_PT_NEVERCRACK ${TDIR}/../src/modules/module_*.c | sed 's/.*module_0*\([0-9]\+\)\.c/\1/' | tr '\n' ' ')
-SLOW_ALGOS=$(grep -l ATTACK_EXEC_OUTSIDE_KERNEL ${TDIR}/../src/modules/module_*.c | sed 's/.*module_0*\([0-9]\+\)\.c/\1/' | tr '\n' ' ')
+HASHFILE_ONLY=$(grep -l OPTS_TYPE_BINARY_HASHFILE ${TDIR}/../src/modules/module_*.c | sed -E 's/.*module_0*([0-9]+).c/\1/' | tr '\n' ' ')
+SLOW_ALGOS=$(grep -l ATTACK_EXEC_OUTSIDE_KERNEL ${TDIR}/../src/modules/module_*.c | sed -E 's/.*module_0*([0-9]+).c/\1/' | tr '\n' ' ')
 
 OUTD="test_$(date +%s)"
 
@@ -203,7 +208,7 @@ function init()
 
       # download:
 
-      if ! wget -q "${luks_tests_url}" &> /dev/null; then
+      if ! wget -q "${luks_tests_url}" >/dev/null 2>/dev/null; then
         cd - >/dev/null
         echo "ERROR: Could not fetch the luks test files from this url: ${luks_tests_url}"
         exit 1
@@ -211,7 +216,7 @@ function init()
 
       # extract:
 
-      ${EXTRACT_CMD} "${luks_tests}" &> /dev/null
+      ${EXTRACT_CMD} "${luks_tests}" >/dev/null 2>/dev/null
 
       # cleanup:
 
@@ -383,28 +388,28 @@ function status()
       1)
         if ! is_in_array ${hash_type} ${NEVER_CRACK_ALGOS}; then
 
-           echo "password not found, cmdline : ${CMD}" &>> ${OUTD}/logfull.txt
+           echo "password not found, cmdline : ${CMD}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
            ((e_nf++))
 
         fi
 
         ;;
       4)
-        echo "timeout reached, cmdline : ${CMD}" &>> ${OUTD}/logfull.txt
+        echo "timeout reached, cmdline : ${CMD}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
         ((e_to++))
 
         ;;
       10)
         if [ "${pass_only}" -eq 1 ]; then
-          echo "plains not found in output, cmdline : ${CMD}" &>> ${OUTD}/logfull.txt
+          echo "plains not found in output, cmdline : ${CMD}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
         else
-          echo "hash:plains not matched in output, cmdline : ${CMD}" &>> ${OUTD}/logfull.txt
+          echo "hash:plains not matched in output, cmdline : ${CMD}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
         fi
         ((e_nm++))
 
         ;;
       *)
-        echo "! unhandled return code ${RET}, cmdline : ${CMD}" &>> ${OUTD}/logfull.txt
+        echo "! unhandled return code ${RET}, cmdline : ${CMD}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
         echo "! unhandled return code, see ${OUTD}/logfull.txt for details."
         ((e_nf++))
         ;;
@@ -430,7 +435,7 @@ function attack_0()
     e_nm=0
     cnt=0
 
-    echo "> Testing hash type $hash_type with attack mode 0, markov ${MARKOV}, single hash, device-type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 0, markov ${MARKOV}, single hash, device-type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     max=32
 
@@ -467,11 +472,19 @@ function attack_0()
 
       fi
 
+      pass_old=${pass}
+
+      if [ "${hash_type}" -eq 20510 ]; then # special case for PKZIP Master Key
+        pass=$(echo "${pass}" | cut -b 7-) # skip the first 6 chars
+      fi
+
       CMD="echo "${pass}" | ./${BIN} ${OPTS} -a 0 -m ${hash_type} '${hash}'"
 
-      echo -n "[ len $((i + 1)) ] " &>> ${OUTD}/logfull.txt
+      echo -n "[ len $((i + 1)) ] " >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
       output=$(echo "${pass}" | ./${BIN} ${OPTS} -a 0 -m ${hash_type} "${hash}" 2>&1)
+
+      pass=${pass_old}
 
       ret=${?}
 
@@ -485,7 +498,7 @@ function attack_0()
           search="${hash}:${pass}"
         fi
 
-        echo "${output}" | grep -F "${search}" &> /dev/null
+        echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
         if [ "${?}" -ne 0 ]; then
 
@@ -525,7 +538,7 @@ function attack_0()
     e_nm=0
     cnt=0
 
-    echo "> Testing hash type $hash_type with attack mode 0, markov ${MARKOV}, multi hash, Device-Type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 0, markov ${MARKOV}, multi hash, Device-Type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     hash_file=${OUTD}/${hash_type}_hashes.txt
 
@@ -568,7 +581,7 @@ function attack_0()
           search="${hash}:${pass}"
         fi
 
-        echo "${output}" | grep -F "${search}" &> /dev/null
+        echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
         if [ "${?}" -ne 0 ]; then
 
@@ -633,7 +646,7 @@ function attack_1()
       min=0
     fi
 
-    echo "> Testing hash type $hash_type with attack mode 1, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 1, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
     i=1
     while read -u 9 hash; do
 
@@ -647,23 +660,74 @@ function attack_1()
 
         fi
 
-        CMD="./${BIN} ${OPTS} -a 1 -m ${hash_type} '${hash}' ${OUTD}/${hash_type}_dict1 ${OUTD}/${hash_type}_dict2"
+        line_nr=1
 
-        echo -n "[ len $i ] " &>> ${OUTD}/logfull.txt
+        if [ "${i}" -gt 1 ]; then
+          line_nr=$((${i} - 1))
+        fi
 
-        output=$(./${BIN} ${OPTS} -a 1 -m ${hash_type} "${hash}" ${OUTD}/${hash_type}_dict1 ${OUTD}/${hash_type}_dict2 2>&1)
+        dict1="${OUTD}/${hash_type}_dict1"
+        dict2="${OUTD}/${hash_type}_dict2"
+
+        if [ "${hash_type}" -eq 20510 ]; then # special case for PKZIP Master Key
+          line_dict1=$(sed -n ${line_nr}p ${dict1})
+          line_dict2=$(sed -n ${line_nr}p ${dict2})
+          line_num=$(wc -l ${dict1} | sed -E 's/ *([0-9]+) .*$/\1/')
+
+          line_dict1_orig=${line_dict1}
+          line_dict2_orig=${line_dict2}
+
+          if [ "${#line_dict1}" -ge 6 ]; then
+            line_dict1=$(echo "${line_dict1}" | cut -b 7-) # skip the first 6 chars
+          else
+            # we need to also "steal" some chars from the second dict
+            num_to_steal=$((6 - ${#line_dict1}))
+            num_steal_start=$((${num_to_steal} + 1))
+
+            if [ "${#line_dict2}" -ge 6 ]; then
+              num_to_steal_new=$(((${#line_dict2} - ${num_to_steal}) / 2))
+
+              if [ "${num_to_steal_new}" -gt ${num_to_steal} ]; then
+                num_to_steal=${num_to_steal_new}
+              fi
+            fi
+
+            line_chars_stolen=$(echo "${line_dict2}" | cut -b -${num_to_steal} | cut -b ${num_steal_start}-)
+
+            line_dict1="${line_chars_stolen}"
+            line_dict2=$(echo "${line_dict2}" | cut -b $((${num_to_steal} + 1))-)
+          fi
+
+          # finally, modify the dicts accordingly:
+
+          tmp_file="${dict1}_mod"
+
+          head -n $((${line_nr} - 1)) ${dict1} > ${tmp_file}
+          echo "${line_dict1}" >> ${tmp_file}
+          tail -n $((${line_num} - ${line_nr} - 1)) ${dict1} >> ${tmp_file}
+
+          dict1=${tmp_file}
+
+          tmp_file="${dict2}_mod"
+
+          head -n $((${line_nr} - 1)) ${dict2} > ${tmp_file}
+          echo "${line_dict2}" >> ${tmp_file}
+          tail -n $((${line_num} - ${line_nr} - 1)) ${dict2} >> ${tmp_file}
+
+          dict2=${tmp_file}
+        fi
+
+        CMD="./${BIN} ${OPTS} -a 1 -m ${hash_type} '${hash}' ${dict1} ${dict2}"
+
+        echo -n "[ len $i ] " >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
+
+        output=$(./${BIN} ${OPTS} -a 1 -m ${hash_type} "${hash}" ${dict1} ${dict2} 2>&1)
 
         ret=${?}
 
         echo "${output}" >> ${OUTD}/logfull.txt
 
         if [ "${ret}" -eq 0 ]; then
-
-          line_nr=1
-
-          if [ "${i}" -gt 1 ]; then
-            line_nr=$((${i} - 1))
-          fi
 
           line_dict1=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict1)
           line_dict2=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict2)
@@ -674,7 +738,7 @@ function attack_1()
             search="${hash}:${line_dict1}${line_dict2}"
           fi
 
-          echo "${output}" | grep -F "${search}" &> /dev/null
+          echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
           if [ "${?}" -ne 0 ]; then
 
@@ -759,7 +823,7 @@ function attack_1()
 
     CMD="./${BIN} ${OPTS} -a 1 -m ${hash_type} ${hash_file} ${OUTD}/${hash_type}_dict1 ${OUTD}/${hash_type}_dict2"
 
-    echo "> Testing hash type $hash_type with attack mode 1, markov ${MARKOV}, multi hash, Device-Type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 1, markov ${MARKOV}, multi hash, Device-Type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     output=$(./${BIN} ${OPTS} -a 1 -m ${hash_type} ${hash_file} ${OUTD}/${hash_type}_dict1 ${OUTD}/${hash_type}_dict2 2>&1)
 
@@ -788,7 +852,7 @@ function attack_1()
           search="${hash}:${line_dict1}${line_dict2}"
         fi
 
-        echo "${output}" | grep -F "${search}" &> /dev/null
+        echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
         if [ "${?}" -ne 0 ]; then
 
@@ -841,7 +905,7 @@ function attack_3()
     e_nm=0
     cnt=0
 
-    echo "> Testing hash type $hash_type with attack mode 3, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 3, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     max=8
 
@@ -919,9 +983,24 @@ function attack_3()
 
       fi
 
+      if [ "${hash_type}" -eq 20510 ]; then # special case for PKZIP Master Key
+        if [ "${i}" -le 1 ]; then
+          ((i++))
+          continue
+        fi
+
+        cut_pos=$((${i} * 2 + 6 - ${i} + 1)) # skip it in groups of 2 ("?d"), at least 6, offset +1 for cut to work
+
+        if [ "${i}" -gt 6 ]; then
+          cut_pos=13 # 6 * ?d + 1 (6 * 2 + 1)
+        fi
+
+        mask=$(echo "${mask}" | cut -b ${cut_pos}-)
+      fi
+
       CMD="./${BIN} ${OPTS} -a 3 -m ${hash_type} '${hash}' ${mask}"
 
-      echo -n "[ len $i ] " &>> ${OUTD}/logfull.txt
+      echo -n "[ len $i ] " >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
       output=$(./${BIN} ${OPTS} -a 3 -m ${hash_type} "${hash}" ${mask} 2>&1)
 
@@ -939,7 +1018,7 @@ function attack_3()
           search="${hash}:${line_dict}"
         fi
 
-        echo "${output}" | grep -F "${search}" &> /dev/null
+        echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
         if [ "${?}" -ne 0 ]; then
 
@@ -1266,7 +1345,7 @@ function attack_3()
 
     CMD="./${BIN} ${OPTS} -a 3 -m ${hash_type} ${increment_charset_opts} ${hash_file} ${mask} "
 
-    echo "> Testing hash type $hash_type with attack mode 3, markov ${MARKOV}, multi hash, Device-Type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 3, markov ${MARKOV}, multi hash, Device-Type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     output=$(./${BIN} ${OPTS} -a 3 -m ${hash_type} ${increment_charset_opts} ${hash_file} ${mask} 2>&1)
 
@@ -1289,7 +1368,7 @@ function attack_3()
           search="${hash}:${pass}"
         fi
 
-        echo "${output}" | grep -F "${search}" &> /dev/null
+        echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
         if [ "${?}" -ne 0 ]; then
 
@@ -1342,7 +1421,7 @@ function attack_6()
     e_nm=0
     cnt=0
 
-    echo "> Testing hash type $hash_type with attack mode 6, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 6, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     min=1
     max=8
@@ -1440,6 +1519,10 @@ function attack_6()
 
         pass=$(sed -n ${i}p ${OUTD}/${hash_type}_passwords.txt)
 
+        if [ "${hash_type}" -eq 20510 ]; then # special case for PKZIP Master Key
+          pass=$(echo "${pass}" | cut -b 7-) # skip the first 6 chars
+        fi
+
         if [ ${#pass} -le ${i} ]; then
           ((i++))
           continue
@@ -1452,7 +1535,7 @@ function attack_6()
 
         rm -f ${dict1_a6}.txt # temporary file
 
-        line_num=$(wc -l ${dict1_a6} | sed 's/ .*$//')
+        line_num=$(wc -l ${dict1_a6} | sed -E 's/ *([0-9]+) .*$/\1/')
 
         sorted_lines=$(seq 1 ${line_num})
 
@@ -1486,7 +1569,7 @@ function attack_6()
 
         CMD="./${BIN} ${OPTS} -a 6 -m ${hash_type} '${hash}' ${dict1_a6} ${mask}"
 
-        echo -n "[ len $i ] " &>> ${OUTD}/logfull.txt
+        echo -n "[ len $i ] " >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
         output=$(./${BIN} ${OPTS} -a 6 -m ${hash_type} "${hash}" ${dict1_a6} ${mask} 2>&1)
 
@@ -1511,7 +1594,7 @@ function attack_6()
             search="${hash}:${line_dict1}${line_dict2}"
           fi
 
-          echo "${output}" | grep -F "${search}" &> /dev/null
+          echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
           if [ "${?}" -ne 0 ]; then
 
@@ -1621,7 +1704,7 @@ function attack_6()
 
       CMD="./${BIN} ${OPTS} -a 6 -m ${hash_type} ${hash_file} ${OUTD}/${hash_type}_dict1_multi_${i} ${mask}"
 
-      echo "> Testing hash type $hash_type with attack mode 6, markov ${MARKOV}, multi hash with word len ${i}." &>> ${OUTD}/logfull.txt
+      echo "> Testing hash type $hash_type with attack mode 6, markov ${MARKOV}, multi hash with word len ${i}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
       output=$(./${BIN} ${OPTS} -a 6 -m ${hash_type} ${hash_file} ${OUTD}/${hash_type}_dict1_multi_${i} ${mask} 2>&1)
 
@@ -1644,7 +1727,7 @@ function attack_6()
             search="${hash}:${line_dict1}${line_dict2}"
           fi
 
-          echo "${output}" | grep -F "${search}" &> /dev/null
+          echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
           if [ "${?}" -ne 0 ]; then
 
@@ -1699,7 +1782,7 @@ function attack_7()
     e_nm=0
     cnt=0
 
-    echo "> Testing hash type $hash_type with attack mode 7, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hash_type with attack mode 7, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     min=1
     max=8
@@ -1782,13 +1865,34 @@ function attack_7()
 
         # adjust mask if needed
 
+        line_nr=1
+
+        if [ "${i}" -gt 1 ]; then
+          line_nr=$((${i} - 1))
+        fi
+
         if [ "${hash_type}" -eq 2500 ]; then
 
-          line_nr=1
+          pass_part_1=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict1)
+          pass_part_2=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict2)
 
-          if [ "${i}" -gt 1 ]; then
-            line_nr=$((${i} - 1))
-          fi
+          pass_part_2_len=${#pass_part_2}
+
+          pass=${pass_part_1}${pass_part_2}
+
+          pass_len=${#pass}
+
+          # add first x chars of password to mask and append the (old) mask
+
+          mask_len=${#mask}
+          mask_len=$((mask_len / 2))
+
+          mask_prefix=$(echo ${pass} | cut -b -$((pass_len - ${mask_len} - ${pass_part_2_len})))
+          mask=${mask_prefix}${mask}
+
+        fi
+
+        if [ "${hash_type}" -eq 16800 ]; then
 
           pass_part_1=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict1)
           pass_part_2=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict2)
@@ -1808,29 +1912,31 @@ function attack_7()
 
         fi
 
-        if [ "${hash_type}" -eq 16800 ]; then
-
-          line_nr=1
-
-          if [ "${i}" -gt 1 ]; then
-            line_nr=$((${i} - 1))
-          fi
+        if [ "${hash_type}" -eq 20510 ]; then
 
           pass_part_1=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict1)
           pass_part_2=$(sed -n ${line_nr}p ${OUTD}/${hash_type}_dict2)
 
-          pass_part_2_len=${#pass_part_2}
-
           pass=${pass_part_1}${pass_part_2}
+
           pass_len=${#pass}
 
-          # add first x chars of password to mask and append the (old) mask
+          if [ "${pass_len}" -le 6 ]; then
+            ((i++))
+            continue
+          fi
 
-          mask_len=${#mask}
-          mask_len=$((mask_len / 2))
+          pass_old=${pass}
 
-          mask_prefix=$(echo ${pass} | cut -b -$((pass_len - ${mask_len} - ${pass_part_2_len})))
-          mask=${mask_prefix}${mask}
+          pass=$(echo "${pass}" | cut -b 7-) # skip the first 6 chars
+
+          mask_len=$((${#mask} / 2))
+
+          echo "${pass_old}" | cut -b -$((6 + ${mask_len})) > ${OUTD}/${hash_type}_dict1_custom
+          echo "${pass}"     | cut -b $((${mask_len} + 1))- > ${OUTD}/${hash_type}_dict2_custom
+
+          min=0 # hack to use the custom dict
+          mask_custom=${mask}
 
         fi
 
@@ -1846,7 +1952,7 @@ function attack_7()
 
         CMD="./${BIN} ${OPTS} -a 7 -m ${hash_type} '${hash}' ${mask} ${dict2}"
 
-        echo -n "[ len $i ] " &>> ${OUTD}/logfull.txt
+        echo -n "[ len $i ] " >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
         output=$(./${BIN} ${OPTS} -a 7 -m ${hash_type} "${hash}" ${mask} ${dict2} 2>&1)
 
@@ -1871,7 +1977,7 @@ function attack_7()
             search="${hash}:${line_dict1}${line_dict2}"
           fi
 
-          echo "${output}" | grep -F "${search}" &> /dev/null
+          echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
           if [ "${?}" -ne 0 ]; then
 
@@ -2016,7 +2122,7 @@ function attack_7()
 
       CMD="./${BIN} ${OPTS} -a 7 -m ${hash_type} ${hash_file} ${mask} ${dict_file}"
 
-      echo "> Testing hash type $hash_type with attack mode 7, markov ${MARKOV}, multi hash with word len ${i}." &>> ${OUTD}/logfull.txt
+      echo "> Testing hash type $hash_type with attack mode 7, markov ${MARKOV}, multi hash with word len ${i}." >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
       output=$(./${BIN} ${OPTS} -a 7 -m ${hash_type} ${hash_file} ${mask} ${dict_file} 2>&1)
 
@@ -2039,7 +2145,7 @@ function attack_7()
             search="${hash}:${line_dict1}${line_dict2}"
           fi
 
-          echo "${output}" | grep -F "${search}" &> /dev/null
+          echo "${output}" | grep -F "${search}" >/dev/null 2>/dev/null
 
           if [ "${?}" -ne 0 ]; then
 
@@ -2236,7 +2342,7 @@ function truecrypt_test()
   esac
 
   if [ ${#CMD} -gt 5 ]; then
-    echo "> Testing hash type $hashType with attack mode 3, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}, tcMode ${tcMode}" &>> ${OUTD}/logfull.txt
+    echo "> Testing hash type $hashType with attack mode 3, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}, tcMode ${tcMode}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
     output=$(${CMD} 2>&1)
 
@@ -2313,7 +2419,7 @@ function veracrypt_test()
 
   CMD="echo hashca{a..z} | ./${BIN} ${OPTS} -a 0 -m ${hash_type} ${filename}"
 
-  echo "> Testing hash type ${hash_type} with attack mode 0, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}, cipher ${cipher_cascade}" &>> ${OUTD}/logfull.txt
+  echo "> Testing hash type ${hash_type} with attack mode 0, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}, cipher ${cipher_cascade}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
   output=$(${CMD} 2>&1)
 
@@ -2439,7 +2545,7 @@ function luks_test()
           esac
 
           if [ -n "${CMD}" ]; then
-            echo "> Testing hash type ${hashType} with attack mode ${attackType}, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}, luksMode ${luks_mode}" &>> ${OUTD}/logfull.txt
+            echo "> Testing hash type ${hashType} with attack mode ${attackType}, markov ${MARKOV}, single hash, Device-Type ${TYPE}, vector-width ${VECTOR}, luksMode ${luks_mode}" >>${OUTD}/logfull.txt 2>>${OUTD}/logfull.txt
 
             output=$(${CMD} 2>&1)
             ret=${?}
@@ -2472,17 +2578,12 @@ cat << EOF
 
 OPTIONS:
 
-  -V    OpenCL vector-width (either 1, 2, 4 or 8), overrides value from device query :
+  -V    Backend vector-width (either 1, 2, 4 or 8), overrides value from device query :
         '1'         => vector-width 1
         '2'         => vector-width 2 (default)
         '4'         => vector-width 4
         '8'         => vector-width 8
         'all'       => test sequentially vector-width ${VECTOR_WIDTHS}
-
-  -T    OpenCL device-types to use :
-        'gpu'       => gpu devices (default)
-        'cpu'       => cpu devices
-        'all'       => gpu and cpu devices
 
   -t    Select test mode :
         'single'    => single hash (default)
@@ -2492,11 +2593,11 @@ OPTIONS:
   -m    Select hash type :
         'all'       => all hash type supported
         (int)       => hash type integer code (default : 0)
+        (int)-(int) => hash type integer range
 
   -a    Select attack mode :
         'all'       => all attack modes
         (int)       => attack mode integer code (default : 0)
-        (int)-(int) => attack mode integer range
 
   -x    Select cpu architecture :
         '32'        => 32 bit architecture
@@ -2507,11 +2608,29 @@ OPTIONS:
         'linux'     => Linux operating system (use .bin file extension)
         'macos'     => macOS operating system (use .app file extension)
 
+  -d    Select the Backend device :
+        (int)[,int] => comma separated list of devices (default : 1)
+
+  -D    Select the OpenCL device types :
+        '1'         => CPU
+        '2'         => GPU (default)
+        '3'         => FPGA, DSP, Co-Processor
+        (int)[,int] => multiple comma separated device types from the list above
+
+  -O    Use optimized kernels (default : -O)
+
+  -P    Use pure kernels instead of optimized kernels (default : -O)
+
+  -s    Use this session name instead of the default one (default : "hashcat")
+
   -c    Disables markov-chains
 
   -p    Package the tests into a .7z file
 
-  -d    Use this folder as input/output folder for packaged tests
+  -F    Use this folder as test folder instead of the default one
+        (string)    => path to folder
+
+  -I    Use this folder as input/output folder for packaged tests
         (string)    => path to folder
 
   -h    Show this help
@@ -2529,8 +2648,9 @@ TYPE="null"
 VECTOR="default"
 HT=0
 PACKAGE=0
+OPTIMIZED=1
 
-while getopts "V:T:t:m:a:b:hcpd:x:o:" opt; do
+while getopts "V:t:m:a:b:hcpd:x:o:d:D:F:POI:s:" opt; do
 
   case ${opt} in
     "V")
@@ -2546,21 +2666,6 @@ while getopts "V:T:t:m:a:b:hcpd:x:o:" opt; do
         VECTOR=16
       elif [ ${OPTARG} == "all" ]; then
         VECTOR="all"
-      else
-        usage
-      fi
-      ;;
-
-    "T")
-      if [ ${OPTARG} == "gpu" ]; then
-        OPTS="${OPTS} --opencl-device-types 2"
-        TYPE="Gpu"
-      elif [ ${OPTARG} == "cpu" ]; then
-        OPTS="${OPTS} --opencl-device-types 1"
-        TYPE="Cpu"
-      elif [ ${OPTARG} == "all" ]; then
-        OPTS="${OPTS} --opencl-device-types 1,2"
-        TYPE="Cpu + Gpu"
       else
         usage
       fi
@@ -2609,8 +2714,12 @@ while getopts "V:T:t:m:a:b:hcpd:x:o:" opt; do
       MARKOV="disabled"
       ;;
 
-    "d")
+    "I")
       PACKAGE_FOLDER=$( echo ${OPTARG} | sed 's!/$!!g' )
+      ;;
+
+    "s")
+      OPTS="${OPTS} --session \"${OPTARG}\""
       ;;
 
     "p")
@@ -2639,6 +2748,35 @@ while getopts "V:T:t:m:a:b:hcpd:x:o:" opt; do
       fi
       ;;
 
+    "O")
+        # optimized is already default, ignore it
+      ;;
+
+    "d")
+        OPTS="${OPTS} -d ${OPTARG}"
+      ;;
+
+    "D")
+      if [ ${OPTARG} == "1" ]; then
+        OPTS="${OPTS} -D 1"
+        TYPE="Cpu"
+      elif [ ${OPTARG} == "2" ]; then
+        OPTS="${OPTS} -D 2"
+        TYPE="Gpu"
+      else
+        OPTS="${OPTS} -D ${OPTARG}"
+        TYPE="Cpu + Gpu"
+      fi
+      ;;
+
+    "F")
+        OUTD=$( echo ${OPTARG} | sed 's!/$!!g' )
+      ;;
+
+    "P")
+        OPTIMIZED=0
+      ;;
+
     \?)
       usage
       ;;
@@ -2650,9 +2788,22 @@ while getopts "V:T:t:m:a:b:hcpd:x:o:" opt; do
 
 done
 
+export IS_OPTIMIZED=${OPTIMIZED}
+
+if [ "${OPTIMIZED}" -eq 1 ]; then
+  OPTS="${OPTS} -O"
+fi
+
 if [ "${TYPE}" == "null" ]; then
-   TYPE="Gpu"
-   OPTS="${OPTS} --opencl-device-types 2"
+  OPTS="${OPTS} -D 2"
+  TYPE="Gpu"
+fi
+
+if [ "${HT}" -eq 20510 ]; then # special case for PKZIP Master Key
+  if [ "${MODE}" -eq 1 ]; then # if "multi" was forced we need to exit
+    echo "ERROR: -m 20510 = PKZIP Master Key can only be run with a single hash"
+    exit 1
+  fi
 fi
 
 if [ -n "${ARCHITECTURE}" ]; then
@@ -2764,7 +2915,7 @@ if [ "${PACKAGE}" -eq 0 -o -z "${PACKAGE_FOLDER}" ]; then
   rm -rf ${OUTD}/logfull.txt && touch ${OUTD}/logfull.txt
 
   # populate array of hash types where we only should check if pass is in output (not both hash:pass)
-  IFS=';' read -ra PASS_ONLY <<< "${HASHFILE_ONLY}"
+  IFS=';' read -ra PASS_ONLY <<< "${HASHFILE_ONLY} ${NOCHECK_ENCODING}"
   IFS=';' read -ra TIMEOUT_ALGOS <<< "${SLOW_ALGOS}"
 
   IFS=';' read -ra NEVER_CRACK_ALGOS <<< "${NEVER_CRACK}"
@@ -2811,6 +2962,16 @@ if [ "${PACKAGE}" -eq 0 -o -z "${PACKAGE_FOLDER}" ]; then
 
       OPTS_OLD=${OPTS}
       VECTOR_OLD=${VECTOR}
+      MODE_OLD=${MODE}
+
+      if [ "${hash_type}" -eq 20510 ]; then # special case for PKZIP Master Key
+        if [ "${MODE}" -eq 1 ]; then # if "multi" was forced we need to skip it
+          continue
+        fi
+
+        MODE=0 # force single only
+      fi
+
       for CUR_WIDTH in $(echo $VECTOR_WIDTHS); do
 
         if [ "${VECTOR_OLD}" == "all" ] || [ "${VECTOR_OLD}" == "default" ] || [ "${VECTOR_OLD}" == "${CUR_WIDTH}" ]; then
@@ -2823,7 +2984,7 @@ if [ "${PACKAGE}" -eq 0 -o -z "${PACKAGE_FOLDER}" ]; then
           fi
 
           VECTOR=${CUR_WIDTH}
-          OPTS="${OPTS_OLD} --opencl-vector-width ${VECTOR}"
+          OPTS="${OPTS_OLD} --backend-vector-width ${VECTOR}"
 
           if [[ ${IS_SLOW} -eq 1 ]]; then
 
@@ -2872,6 +3033,7 @@ if [ "${PACKAGE}" -eq 0 -o -z "${PACKAGE_FOLDER}" ]; then
       done
       OPTS="${OPTS_OLD}"
       VECTOR="${VECTOR_OLD}"
+      MODE=${MODE_OLD}
     fi
   done
 
@@ -2937,7 +3099,7 @@ if [ "${PACKAGE}" -eq 1 ]; then
 
     MODE=2
 
-    ls "${PACKAGE_FOLDER}"/*multi* &> /dev/null
+    ls "${PACKAGE_FOLDER}"/*multi* >/dev/null 2>/dev/null
 
     if [ "${?}" -ne 0 ]
     then
@@ -2995,6 +3157,6 @@ if [ "${PACKAGE}" -eq 1 ]; then
     -e "s/^\(ATTACK\)=0/\1=${ATTACK}/" \
     ${OUTD}/test.sh
 
-  ${PACKAGE_CMD} ${OUTD}/${OUTD}.7z ${OUTD}/ &> /dev/null
+  ${PACKAGE_CMD} ${OUTD}/${OUTD}.7z ${OUTD}/ >/dev/null 2>/dev/null
 
 fi

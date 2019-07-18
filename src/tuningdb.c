@@ -5,17 +5,11 @@
 
 #include "common.h"
 #include "types.h"
-#include "interface.h"
-#include "timer.h"
 #include "event.h"
 #include "memory.h"
 #include "filehandling.h"
-#include "ext_OpenCL.h"
-#include "tuningdb.h"
-#include "thread.h"
-#include "opencl.h"
-#include "hashes.h"
 #include "shared.h"
+#include "tuningdb.h"
 
 static int sort_by_tuning_db_alias (const void *v1, const void *v2)
 {
@@ -63,7 +57,7 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
   if (user_options->example_hashes == true) return 0;
   if (user_options->keyspace       == true) return 0;
   if (user_options->left           == true) return 0;
-  if (user_options->opencl_info    == true) return 0;
+  if (user_options->backend_info   == true) return 0;
   if (user_options->show           == true) return 0;
   if (user_options->usage          == true) return 0;
   if (user_options->version        == true) return 0;
@@ -74,9 +68,9 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
 
   hc_asprintf (&tuning_db_file, "%s/%s", folder_config->shared_dir, TUNING_DB_FILE);
 
-  FILE *fp = fopen (tuning_db_file, "rb");
+  HCFILE fp;
 
-  if (fp == NULL)
+  if (hc_fopen (&fp, tuning_db_file, "rb") == false)
   {
     event_log_error (hashcat_ctx, "%s: %s", tuning_db_file, strerror (errno));
 
@@ -85,7 +79,7 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
 
   hcfree (tuning_db_file);
 
-  const size_t num_lines = count_lines (fp);
+  const size_t num_lines = count_lines (&fp);
 
   // a bit over-allocated
 
@@ -95,15 +89,15 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
   tuning_db->entry_buf = (tuning_db_entry_t *) hccalloc (num_lines + 1, sizeof (tuning_db_entry_t));
   tuning_db->entry_cnt = 0;
 
-  rewind (fp);
+  hc_rewind (&fp);
 
   int line_num = 0;
 
   char *buf = (char *) hcmalloc (HCBUFSIZ_LARGE);
 
-  while (!feof (fp))
+  while (!hc_feof (&fp))
   {
-    char *line_buf = fgets (buf, HCBUFSIZ_LARGE - 1, fp);
+    char *line_buf = hc_fgets (buf, HCBUFSIZ_LARGE - 1, &fp);
 
     if (line_buf == NULL) break;
 
@@ -276,7 +270,7 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
 
   hcfree (buf);
 
-  fclose (fp);
+  hc_fclose (&fp);
 
   // todo: print loaded 'cnt' message
 

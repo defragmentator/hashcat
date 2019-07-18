@@ -5,20 +5,40 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha1.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
+typedef struct odf11_tmp
+{
+  u32  ipad[5];
+  u32  opad[5];
+
+  u32  dgst[5];
+  u32  out[5];
+
+} odf11_tmp_t;
+
+typedef struct odf11
+{
+  u32 iterations;
+  u32 iv[2];
+  u32 checksum[5];
+  u32 encrypted_data[256];
+
+} odf11_t;
+
 // http://www.schneier.com/code/constants.txt
 
-__constant u32a c_sbox0[256] =
+CONSTANT_VK u32a c_sbox0[256] =
 {
   0xd1310ba6, 0x98dfb5ac, 0x2ffd72db, 0xd01adfb7,
   0xb8e1afed, 0x6a267e96, 0xba7c9045, 0xf12c7f99,
@@ -86,7 +106,7 @@ __constant u32a c_sbox0[256] =
   0x53b02d5d, 0xa99f8fa1, 0x08ba4799, 0x6e85076a
 };
 
-__constant u32a c_sbox1[256] =
+CONSTANT_VK u32a c_sbox1[256] =
 {
   0x4b7a70e9, 0xb5b32944, 0xdb75092e, 0xc4192623,
   0xad6ea6b0, 0x49a7df7d, 0x9cee60b8, 0x8fedb266,
@@ -154,7 +174,7 @@ __constant u32a c_sbox1[256] =
   0x153e21e7, 0x8fb03d4a, 0xe6e39f2b, 0xdb83adf7
 };
 
-__constant u32a c_sbox2[256] =
+CONSTANT_VK u32a c_sbox2[256] =
 {
   0xe93d5a68, 0x948140f7, 0xf64c261c, 0x94692934,
   0x411520f7, 0x7602d4f7, 0xbcf46b2e, 0xd4a20068,
@@ -222,7 +242,7 @@ __constant u32a c_sbox2[256] =
   0xd79a3234, 0x92638212, 0x670efa8e, 0x406000e0
 };
 
-__constant u32a c_sbox3[256] =
+CONSTANT_VK u32a c_sbox3[256] =
 {
   0x3a39ce37, 0xd3faf5cf, 0xabc27737, 0x5ac52d1b,
   0x5cb0679e, 0x4fa33742, 0xd3822740, 0x99bc9bbe,
@@ -290,7 +310,7 @@ __constant u32a c_sbox3[256] =
   0xb74e6132, 0xce77e25b, 0x578fdfe3, 0x3ac372e6
 };
 
-__constant u32a c_pbox[18] =
+CONSTANT_VK u32a c_pbox[18] =
 {
   0x243f6a88, 0x85a308d3, 0x13198a2e, 0x03707344,
   0xa4093822, 0x299f31d0, 0x082efa98, 0xec4e6c89,
@@ -299,18 +319,21 @@ __constant u32a c_pbox[18] =
   0x9216d5d9, 0x8979fb1b
 };
 
-#define BF_ROUND(L,R,N)       \
-{                             \
-  uchar4 c = as_uchar4 ((L)); \
-                              \
-  u32 tmp;                    \
-                              \
-  tmp  = S0[c.s3];            \
-  tmp += S1[c.s2];            \
-  tmp ^= S2[c.s1];            \
-  tmp += S3[c.s0];            \
-                              \
-  (R) ^= tmp ^ P[(N)];        \
+#define BF_ROUND(L,R,N)                       \
+{                                             \
+  u32 tmp;                                    \
+                                              \
+  const u32 r0 = unpack_v8d_from_v32_S ((L)); \
+  const u32 r1 = unpack_v8c_from_v32_S ((L)); \
+  const u32 r2 = unpack_v8b_from_v32_S ((L)); \
+  const u32 r3 = unpack_v8a_from_v32_S ((L)); \
+                                              \
+  tmp  = S0[r0];                              \
+  tmp += S1[r1];                              \
+  tmp ^= S2[r2];                              \
+  tmp += S3[r3];                              \
+                                              \
+  (R) ^= tmp ^ P[(N)];                        \
 }
 
 #define BF_ENCRYPT(L,R) \
@@ -379,7 +402,7 @@ DECLSPEC void hmac_sha1_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipa
   sha1_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m18600_init (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
+KERNEL_FQ void m18600_init (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
 {
   /**
    * base
@@ -481,7 +504,7 @@ __kernel void m18600_init (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
   tmps[gid].out[4] = tmps[gid].dgst[4];
 }
 
-__kernel void m18600_loop (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
+KERNEL_FQ void m18600_loop (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -563,7 +586,7 @@ __kernel void m18600_loop (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
   }
 }
 
-__kernel void __attribute__((reqd_work_group_size(8, 1, 1))) m18600_comp (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
+KERNEL_FQ void FIXED_THREAD_COUNT(FIXED_LOCAL_SIZE) m18600_comp (KERN_ATTR_TMPS_ESALT (odf11_tmp_t, odf11_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -593,15 +616,15 @@ __kernel void __attribute__((reqd_work_group_size(8, 1, 1))) m18600_comp (KERN_A
     P[i] = c_pbox[i] ^ ukey[i % 4];
   }
 
-  __local u32 S0_all[8][256];
-  __local u32 S1_all[8][256];
-  __local u32 S2_all[8][256];
-  __local u32 S3_all[8][256];
+  LOCAL_VK u32 S0_all[FIXED_LOCAL_SIZE][256];
+  LOCAL_VK u32 S1_all[FIXED_LOCAL_SIZE][256];
+  LOCAL_VK u32 S2_all[FIXED_LOCAL_SIZE][256];
+  LOCAL_VK u32 S3_all[FIXED_LOCAL_SIZE][256];
 
-  __local u32 *S0 = S0_all[lid];
-  __local u32 *S1 = S1_all[lid];
-  __local u32 *S2 = S2_all[lid];
-  __local u32 *S3 = S3_all[lid];
+  LOCAL_AS u32 *S0 = S0_all[lid];
+  LOCAL_AS u32 *S1 = S1_all[lid];
+  LOCAL_AS u32 *S2 = S2_all[lid];
+  LOCAL_AS u32 *S3 = S3_all[lid];
 
   for (u32 i = 0; i < 256; i++)
   {
@@ -674,7 +697,7 @@ __kernel void __attribute__((reqd_work_group_size(8, 1, 1))) m18600_comp (KERN_A
     S3[i + 3] = R0;
   }
 
-  __global const odf11_t *es = &esalt_bufs[digests_offset];
+  GLOBAL_AS const odf11_t *es = &esalt_bufs[digests_offset];
 
   u32 ct[2];
 
@@ -797,5 +820,7 @@ __kernel void __attribute__((reqd_work_group_size(8, 1, 1))) m18600_comp (KERN_A
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

@@ -3,7 +3,13 @@
  * License.....: MIT
  */
 
-__constant u64a sbob_sl64[8][256] =
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.h"
+#include "inc_common.h"
+#include "inc_hash_streebog256.h"
+
+CONSTANT_VK u64a sbob256_sl64[8][256] =
 {
   {
     0xd031c397ce553fe6, 0x16ba5b01b006b525, 0xa89bade6296e70c8, 0x6a1f525d77d3435b,
@@ -535,7 +541,7 @@ __constant u64a sbob_sl64[8][256] =
   },
 };
 
-__constant u64a sbob_rc64[12][8] =
+CONSTANT_VK u64a sbob256_rc64[12][8] =
 {
   {
     0xe9daca1eda5b08b1, 0x1f7c65c0812fcbeb, 0x16d0452e43766a2f, 0xfcc485758db84e71,
@@ -586,53 +592,6 @@ __constant u64a sbob_rc64[12][8] =
     0x86cc91189def805d, 0x5228e188aaa41de7, 0x991bb2d9d517f4fa, 0x20d71bf14a92bc48,
   },
 };
-
-#if   VECT_SIZE == 1
-#define BOX(S,n,i)        ((S)[(n)][(i)])
-
-#elif VECT_SIZE == 2
-#define BOX(S,n,i) (u64x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1])
-
-#elif VECT_SIZE == 4
-#define BOX(S,n,i) (u64x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3])
-
-#elif VECT_SIZE == 8
-#define BOX(S,n,i) (u64x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3], \
-                           (S)[(n)][(i).s4], (S)[(n)][(i).s5], (S)[(n)][(i).s6], (S)[(n)][(i).s7])
-
-#elif VECT_SIZE == 16
-#define BOX(S,n,i) (u64x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3], \
-                           (S)[(n)][(i).s4], (S)[(n)][(i).s5], (S)[(n)][(i).s6], (S)[(n)][(i).s7], \
-                           (S)[(n)][(i).s8], (S)[(n)][(i).s9], (S)[(n)][(i).sa], (S)[(n)][(i).sb], \
-                           (S)[(n)][(i).sc], (S)[(n)][(i).sd], (S)[(n)][(i).se], (S)[(n)][(i).sf])
-#endif
-
-#define SBOG_LPSti64                                 \
-  BOX (s_sbob_sl64, 0, ((t[0] >> (i * 8)) & 0xff)) ^ \
-  BOX (s_sbob_sl64, 1, ((t[1] >> (i * 8)) & 0xff)) ^ \
-  BOX (s_sbob_sl64, 2, ((t[2] >> (i * 8)) & 0xff)) ^ \
-  BOX (s_sbob_sl64, 3, ((t[3] >> (i * 8)) & 0xff)) ^ \
-  BOX (s_sbob_sl64, 4, ((t[4] >> (i * 8)) & 0xff)) ^ \
-  BOX (s_sbob_sl64, 5, ((t[5] >> (i * 8)) & 0xff)) ^ \
-  BOX (s_sbob_sl64, 6, ((t[6] >> (i * 8)) & 0xff)) ^ \
-  BOX (s_sbob_sl64, 7, ((t[7] >> (i * 8)) & 0xff))
-
-typedef struct streebog256_ctx
-{
-  u64 h[8];
-  u64 s[8];
-  u64 n[8];
-
-  u32 w0[4];
-  u32 w1[4];
-  u32 w2[4];
-  u32 w3[4];
-
-  int len;
-
-  SHM_TYPE u64a (*s_sbob_sl64)[256];
-
-} streebog256_ctx_t;
 
 DECLSPEC void streebog256_init (streebog256_ctx_t *ctx, SHM_TYPE u64a (*s_sbob_sl64)[256])
 {
@@ -697,13 +656,13 @@ DECLSPEC void streebog256_add (u64 *x, const u64 *y)
   #endif
   for (int i = 7; i >=0; i--)
   {
-    const u64 left  = swap64_S (x[i]);
-    const u64 right = swap64_S (y[i]);
+    const u64 left  = hc_swap64_S (x[i]);
+    const u64 right = hc_swap64_S (y[i]);
     const u64 sum   = left + right + carry;
 
     carry = (sum < left) ? (u64) 1 : (u64) 0;
 
-    x[i] = swap64_S (sum);
+    x[i] = hc_swap64_S (sum);
   }
 }
 
@@ -754,7 +713,7 @@ DECLSPEC void streebog256_g (u64 *h, const u64 *n, const u64 *m, SHM_TYPE u64a (
 
     for (int i = 0; i < 8; i++)
     {
-      t[i] = k[i] ^ sbob_rc64[r][i];
+      t[i] = k[i] ^ sbob256_rc64[r][i];
     }
 
     #ifdef _unroll
@@ -799,77 +758,119 @@ DECLSPEC void streebog256_transform (streebog256_ctx_t *ctx, const u32 *w0, cons
 
 DECLSPEC void streebog256_update_64 (streebog256_ctx_t *ctx, u32 *w0, u32 *w1, u32 *w2, u32 *w3, const int len)
 {
-  const int pos = ctx->len;
+  MAYBE_VOLATILE const int pos = ctx->len & 63;
 
-  if ((pos + len) < 64)
+  ctx->len += len;
+
+  if (pos == 0)
   {
-    switch_buffer_by_offset_be_S (w0, w1, w2, w3, pos);
+    ctx->w0[0] = w0[0];
+    ctx->w0[1] = w0[1];
+    ctx->w0[2] = w0[2];
+    ctx->w0[3] = w0[3];
+    ctx->w1[0] = w1[0];
+    ctx->w1[1] = w1[1];
+    ctx->w1[2] = w1[2];
+    ctx->w1[3] = w1[3];
+    ctx->w2[0] = w2[0];
+    ctx->w2[1] = w2[1];
+    ctx->w2[2] = w2[2];
+    ctx->w2[3] = w2[3];
+    ctx->w3[0] = w3[0];
+    ctx->w3[1] = w3[1];
+    ctx->w3[2] = w3[2];
+    ctx->w3[3] = w3[3];
 
-    ctx->w0[0] |= w0[0];
-    ctx->w0[1] |= w0[1];
-    ctx->w0[2] |= w0[2];
-    ctx->w0[3] |= w0[3];
-    ctx->w1[0] |= w1[0];
-    ctx->w1[1] |= w1[1];
-    ctx->w1[2] |= w1[2];
-    ctx->w1[3] |= w1[3];
-    ctx->w2[0] |= w2[0];
-    ctx->w2[1] |= w2[1];
-    ctx->w2[2] |= w2[2];
-    ctx->w2[3] |= w2[3];
-    ctx->w3[0] |= w3[0];
-    ctx->w3[1] |= w3[1];
-    ctx->w3[2] |= w3[2];
-    ctx->w3[3] |= w3[3];
+    if (len == 64)
+    {
+      streebog256_transform (ctx, ctx->w0, ctx->w1, ctx->w2, ctx->w3);
 
-    ctx->len += len;
+      ctx->w0[0] = 0;
+      ctx->w0[1] = 0;
+      ctx->w0[2] = 0;
+      ctx->w0[3] = 0;
+      ctx->w1[0] = 0;
+      ctx->w1[1] = 0;
+      ctx->w1[2] = 0;
+      ctx->w1[3] = 0;
+      ctx->w2[0] = 0;
+      ctx->w2[1] = 0;
+      ctx->w2[2] = 0;
+      ctx->w2[3] = 0;
+      ctx->w3[0] = 0;
+      ctx->w3[1] = 0;
+      ctx->w3[2] = 0;
+      ctx->w3[3] = 0;
+    }
   }
   else
   {
-    u32 c0[4] = { 0 };
-    u32 c1[4] = { 0 };
-    u32 c2[4] = { 0 };
-    u32 c3[4] = { 0 };
+    if ((pos + len) < 64)
+    {
+      switch_buffer_by_offset_be_S (w0, w1, w2, w3, pos);
 
-    switch_buffer_by_offset_carry_be_S (w0, w1, w2, w3, c0, c1, c2, c3, pos);
+      ctx->w0[0] |= w0[0];
+      ctx->w0[1] |= w0[1];
+      ctx->w0[2] |= w0[2];
+      ctx->w0[3] |= w0[3];
+      ctx->w1[0] |= w1[0];
+      ctx->w1[1] |= w1[1];
+      ctx->w1[2] |= w1[2];
+      ctx->w1[3] |= w1[3];
+      ctx->w2[0] |= w2[0];
+      ctx->w2[1] |= w2[1];
+      ctx->w2[2] |= w2[2];
+      ctx->w2[3] |= w2[3];
+      ctx->w3[0] |= w3[0];
+      ctx->w3[1] |= w3[1];
+      ctx->w3[2] |= w3[2];
+      ctx->w3[3] |= w3[3];
+    }
+    else
+    {
+      u32 c0[4] = { 0 };
+      u32 c1[4] = { 0 };
+      u32 c2[4] = { 0 };
+      u32 c3[4] = { 0 };
 
-    ctx->w0[0] |= w0[0];
-    ctx->w0[1] |= w0[1];
-    ctx->w0[2] |= w0[2];
-    ctx->w0[3] |= w0[3];
-    ctx->w1[0] |= w1[0];
-    ctx->w1[1] |= w1[1];
-    ctx->w1[2] |= w1[2];
-    ctx->w1[3] |= w1[3];
-    ctx->w2[0] |= w2[0];
-    ctx->w2[1] |= w2[1];
-    ctx->w2[2] |= w2[2];
-    ctx->w2[3] |= w2[3];
-    ctx->w3[0] |= w3[0];
-    ctx->w3[1] |= w3[1];
-    ctx->w3[2] |= w3[2];
-    ctx->w3[3] |= w3[3];
+      switch_buffer_by_offset_carry_be_S (w0, w1, w2, w3, c0, c1, c2, c3, pos);
 
-    streebog256_transform (ctx, ctx->w0, ctx->w1, ctx->w2, ctx->w3);
+      ctx->w0[0] |= w0[0];
+      ctx->w0[1] |= w0[1];
+      ctx->w0[2] |= w0[2];
+      ctx->w0[3] |= w0[3];
+      ctx->w1[0] |= w1[0];
+      ctx->w1[1] |= w1[1];
+      ctx->w1[2] |= w1[2];
+      ctx->w1[3] |= w1[3];
+      ctx->w2[0] |= w2[0];
+      ctx->w2[1] |= w2[1];
+      ctx->w2[2] |= w2[2];
+      ctx->w2[3] |= w2[3];
+      ctx->w3[0] |= w3[0];
+      ctx->w3[1] |= w3[1];
+      ctx->w3[2] |= w3[2];
+      ctx->w3[3] |= w3[3];
 
-    ctx->w0[0] = c0[0];
-    ctx->w0[1] = c0[1];
-    ctx->w0[2] = c0[2];
-    ctx->w0[3] = c0[3];
-    ctx->w1[0] = c1[0];
-    ctx->w1[1] = c1[1];
-    ctx->w1[2] = c1[2];
-    ctx->w1[3] = c1[3];
-    ctx->w2[0] = c2[0];
-    ctx->w2[1] = c2[1];
-    ctx->w2[2] = c2[2];
-    ctx->w2[3] = c2[3];
-    ctx->w3[0] = c3[0];
-    ctx->w3[1] = c3[1];
-    ctx->w3[2] = c3[2];
-    ctx->w3[3] = c3[3];
+      streebog256_transform (ctx, ctx->w0, ctx->w1, ctx->w2, ctx->w3);
 
-    ctx->len = (pos + len) & 63;
+      ctx->w0[0] = c0[0];
+      ctx->w0[1] = c0[1];
+      ctx->w0[2] = c0[2];
+      ctx->w0[3] = c0[3];
+      ctx->w1[0] = c1[0];
+      ctx->w1[1] = c1[1];
+      ctx->w1[2] = c1[2];
+      ctx->w1[3] = c1[3];
+      ctx->w2[0] = c2[0];
+      ctx->w2[1] = c2[1];
+      ctx->w2[2] = c2[2];
+      ctx->w2[3] = c2[3];
+      ctx->w3[0] = c3[0];
+      ctx->w3[1] = c3[1];
+      ctx->w3[2] = c3[2];
+      ctx->w3[3] = c3[3];
+    }
   }
 }
 
@@ -941,22 +942,22 @@ DECLSPEC void streebog256_update_swap (streebog256_ctx_t *ctx, const u32 *w, int
 
   while (len > 63)
   {
-    w0[0] = swap32_S (w[off +  0]);
-    w0[1] = swap32_S (w[off +  1]);
-    w0[2] = swap32_S (w[off +  2]);
-    w0[3] = swap32_S (w[off +  3]);
-    w1[0] = swap32_S (w[off +  4]);
-    w1[1] = swap32_S (w[off +  5]);
-    w1[2] = swap32_S (w[off +  6]);
-    w1[3] = swap32_S (w[off +  7]);
-    w2[0] = swap32_S (w[off +  8]);
-    w2[1] = swap32_S (w[off +  9]);
-    w2[2] = swap32_S (w[off + 10]);
-    w2[3] = swap32_S (w[off + 11]);
-    w3[0] = swap32_S (w[off + 12]);
-    w3[1] = swap32_S (w[off + 13]);
-    w3[2] = swap32_S (w[off + 14]);
-    w3[3] = swap32_S (w[off + 15]);
+    w0[0] = hc_swap32_S (w[off +  0]);
+    w0[1] = hc_swap32_S (w[off +  1]);
+    w0[2] = hc_swap32_S (w[off +  2]);
+    w0[3] = hc_swap32_S (w[off +  3]);
+    w1[0] = hc_swap32_S (w[off +  4]);
+    w1[1] = hc_swap32_S (w[off +  5]);
+    w1[2] = hc_swap32_S (w[off +  6]);
+    w1[3] = hc_swap32_S (w[off +  7]);
+    w2[0] = hc_swap32_S (w[off +  8]);
+    w2[1] = hc_swap32_S (w[off +  9]);
+    w2[2] = hc_swap32_S (w[off + 10]);
+    w2[3] = hc_swap32_S (w[off + 11]);
+    w3[0] = hc_swap32_S (w[off + 12]);
+    w3[1] = hc_swap32_S (w[off + 13]);
+    w3[2] = hc_swap32_S (w[off + 14]);
+    w3[3] = hc_swap32_S (w[off + 15]);
 
     off += 16;
     len -= 64;
@@ -966,28 +967,28 @@ DECLSPEC void streebog256_update_swap (streebog256_ctx_t *ctx, const u32 *w, int
 
   if (len > 0)
   {
-    w0[0] = swap32_S (w[off +  0]);
-    w0[1] = swap32_S (w[off +  1]);
-    w0[2] = swap32_S (w[off +  2]);
-    w0[3] = swap32_S (w[off +  3]);
-    w1[0] = swap32_S (w[off +  4]);
-    w1[1] = swap32_S (w[off +  5]);
-    w1[2] = swap32_S (w[off +  6]);
-    w1[3] = swap32_S (w[off +  7]);
-    w2[0] = swap32_S (w[off +  8]);
-    w2[1] = swap32_S (w[off +  9]);
-    w2[2] = swap32_S (w[off + 10]);
-    w2[3] = swap32_S (w[off + 11]);
-    w3[0] = swap32_S (w[off + 12]);
-    w3[1] = swap32_S (w[off + 13]);
-    w3[2] = swap32_S (w[off + 14]);
-    w3[3] = swap32_S (w[off + 15]);
+    w0[0] = hc_swap32_S (w[off +  0]);
+    w0[1] = hc_swap32_S (w[off +  1]);
+    w0[2] = hc_swap32_S (w[off +  2]);
+    w0[3] = hc_swap32_S (w[off +  3]);
+    w1[0] = hc_swap32_S (w[off +  4]);
+    w1[1] = hc_swap32_S (w[off +  5]);
+    w1[2] = hc_swap32_S (w[off +  6]);
+    w1[3] = hc_swap32_S (w[off +  7]);
+    w2[0] = hc_swap32_S (w[off +  8]);
+    w2[1] = hc_swap32_S (w[off +  9]);
+    w2[2] = hc_swap32_S (w[off + 10]);
+    w2[3] = hc_swap32_S (w[off + 11]);
+    w3[0] = hc_swap32_S (w[off + 12]);
+    w3[1] = hc_swap32_S (w[off + 13]);
+    w3[2] = hc_swap32_S (w[off + 14]);
+    w3[3] = hc_swap32_S (w[off + 15]);
 
     streebog256_update_64 (ctx, w0, w1, w2, w3, len);
   }
 }
 
-DECLSPEC void streebog256_update_global_swap (streebog256_ctx_t *ctx, const __global u32 *w, int len)
+DECLSPEC void streebog256_update_global_swap (streebog256_ctx_t *ctx, GLOBAL_AS const u32 *w, int len)
 {
   u32 w0[4];
   u32 w1[4];
@@ -998,22 +999,22 @@ DECLSPEC void streebog256_update_global_swap (streebog256_ctx_t *ctx, const __gl
 
   while (len > 63)
   {
-    w0[0] = swap32_S (w[off +  0]);
-    w0[1] = swap32_S (w[off +  1]);
-    w0[2] = swap32_S (w[off +  2]);
-    w0[3] = swap32_S (w[off +  3]);
-    w1[0] = swap32_S (w[off +  4]);
-    w1[1] = swap32_S (w[off +  5]);
-    w1[2] = swap32_S (w[off +  6]);
-    w1[3] = swap32_S (w[off +  7]);
-    w2[0] = swap32_S (w[off +  8]);
-    w2[1] = swap32_S (w[off +  9]);
-    w2[2] = swap32_S (w[off + 10]);
-    w2[3] = swap32_S (w[off + 11]);
-    w3[0] = swap32_S (w[off + 12]);
-    w3[1] = swap32_S (w[off + 13]);
-    w3[2] = swap32_S (w[off + 14]);
-    w3[3] = swap32_S (w[off + 15]);
+    w0[0] = hc_swap32_S (w[off +  0]);
+    w0[1] = hc_swap32_S (w[off +  1]);
+    w0[2] = hc_swap32_S (w[off +  2]);
+    w0[3] = hc_swap32_S (w[off +  3]);
+    w1[0] = hc_swap32_S (w[off +  4]);
+    w1[1] = hc_swap32_S (w[off +  5]);
+    w1[2] = hc_swap32_S (w[off +  6]);
+    w1[3] = hc_swap32_S (w[off +  7]);
+    w2[0] = hc_swap32_S (w[off +  8]);
+    w2[1] = hc_swap32_S (w[off +  9]);
+    w2[2] = hc_swap32_S (w[off + 10]);
+    w2[3] = hc_swap32_S (w[off + 11]);
+    w3[0] = hc_swap32_S (w[off + 12]);
+    w3[1] = hc_swap32_S (w[off + 13]);
+    w3[2] = hc_swap32_S (w[off + 14]);
+    w3[3] = hc_swap32_S (w[off + 15]);
 
     off += 16;
     len -= 64;
@@ -1023,22 +1024,22 @@ DECLSPEC void streebog256_update_global_swap (streebog256_ctx_t *ctx, const __gl
 
   if (len > 0)
   {
-    w0[0] = swap32_S (w[off +  0]);
-    w0[1] = swap32_S (w[off +  1]);
-    w0[2] = swap32_S (w[off +  2]);
-    w0[3] = swap32_S (w[off +  3]);
-    w1[0] = swap32_S (w[off +  4]);
-    w1[1] = swap32_S (w[off +  5]);
-    w1[2] = swap32_S (w[off +  6]);
-    w1[3] = swap32_S (w[off +  7]);
-    w2[0] = swap32_S (w[off +  8]);
-    w2[1] = swap32_S (w[off +  9]);
-    w2[2] = swap32_S (w[off + 10]);
-    w2[3] = swap32_S (w[off + 11]);
-    w3[0] = swap32_S (w[off + 12]);
-    w3[1] = swap32_S (w[off + 13]);
-    w3[2] = swap32_S (w[off + 14]);
-    w3[3] = swap32_S (w[off + 15]);
+    w0[0] = hc_swap32_S (w[off +  0]);
+    w0[1] = hc_swap32_S (w[off +  1]);
+    w0[2] = hc_swap32_S (w[off +  2]);
+    w0[3] = hc_swap32_S (w[off +  3]);
+    w1[0] = hc_swap32_S (w[off +  4]);
+    w1[1] = hc_swap32_S (w[off +  5]);
+    w1[2] = hc_swap32_S (w[off +  6]);
+    w1[3] = hc_swap32_S (w[off +  7]);
+    w2[0] = hc_swap32_S (w[off +  8]);
+    w2[1] = hc_swap32_S (w[off +  9]);
+    w2[2] = hc_swap32_S (w[off + 10]);
+    w2[3] = hc_swap32_S (w[off + 11]);
+    w3[0] = hc_swap32_S (w[off + 12]);
+    w3[1] = hc_swap32_S (w[off + 13]);
+    w3[2] = hc_swap32_S (w[off + 14]);
+    w3[3] = hc_swap32_S (w[off + 15]);
 
     streebog256_update_64 (ctx, w0, w1, w2, w3, len);
   }
@@ -1046,7 +1047,7 @@ DECLSPEC void streebog256_update_global_swap (streebog256_ctx_t *ctx, const __gl
 
 DECLSPEC void streebog256_final (streebog256_ctx_t *ctx)
 {
-  const int pos = ctx->len & 63;
+  MAYBE_VOLATILE const int pos = ctx->len & 63;
 
   append_0x01_4x4_S (ctx->w0, ctx->w1, ctx->w2, ctx->w3, pos ^ 3);
 
@@ -1064,7 +1065,7 @@ DECLSPEC void streebog256_final (streebog256_ctx_t *ctx)
   streebog256_g (ctx->h, ctx->n, m, ctx->s_sbob_sl64);
 
   u64 sizebuf[8] = { 0 };
-  sizebuf[7] = swap64_S ((u64) (ctx->len << 3));
+  sizebuf[7] = hc_swap64_S ((u64) (pos << 3));
 
   streebog256_add (ctx->n, sizebuf);
 
@@ -1076,13 +1077,6 @@ DECLSPEC void streebog256_final (streebog256_ctx_t *ctx)
 
   streebog256_g (ctx->h, nullbuf, ctx->s, ctx->s_sbob_sl64);
 }
-
-typedef struct streebog256_hmac_ctx
-{
-  streebog256_ctx_t ipad;
-  streebog256_ctx_t opad;
-
-} streebog256_hmac_ctx_t;
 
 DECLSPEC void streebog256_hmac_init_64 (streebog256_hmac_ctx_t *ctx, const u32 *w0, const u32 *w1, const u32 *w2, const u32 *w3, SHM_TYPE u64a (*s_sbob_sl64)[256])
 {
@@ -1112,7 +1106,9 @@ DECLSPEC void streebog256_hmac_init_64 (streebog256_hmac_ctx_t *ctx, const u32 *
 
   streebog256_init (&ctx->ipad, s_sbob_sl64);
 
-  streebog256_update_64 (&ctx->ipad, t0, t1, t2, t3, 64);
+  streebog256_transform (&ctx->ipad, t0, t1, t2, t3);
+
+  ctx->ipad.len = 64;
 
   // opad
 
@@ -1135,7 +1131,9 @@ DECLSPEC void streebog256_hmac_init_64 (streebog256_hmac_ctx_t *ctx, const u32 *
 
   streebog256_init (&ctx->opad, s_sbob_sl64);
 
-  streebog256_update_64 (&ctx->opad, t0, t1, t2, t3, 64);
+  streebog256_transform (&ctx->opad, t0, t1, t2, t3);
+
+  ctx->opad.len = 64;
 }
 
 DECLSPEC void streebog256_hmac_init (streebog256_hmac_ctx_t *ctx, const u32 *w, const int len, SHM_TYPE u64a (*s_sbob_sl64)[256])
@@ -1231,22 +1229,22 @@ DECLSPEC void streebog256_hmac_init_swap (streebog256_hmac_ctx_t *ctx, const u32
   }
   else
   {
-    w0[0] = swap32_S (w[ 0]);
-    w0[1] = swap32_S (w[ 1]);
-    w0[2] = swap32_S (w[ 2]);
-    w0[3] = swap32_S (w[ 3]);
-    w1[0] = swap32_S (w[ 4]);
-    w1[1] = swap32_S (w[ 5]);
-    w1[2] = swap32_S (w[ 6]);
-    w1[3] = swap32_S (w[ 7]);
-    w2[0] = swap32_S (w[ 8]);
-    w2[1] = swap32_S (w[ 9]);
-    w2[2] = swap32_S (w[10]);
-    w2[3] = swap32_S (w[11]);
-    w3[0] = swap32_S (w[12]);
-    w3[1] = swap32_S (w[13]);
-    w3[2] = swap32_S (w[14]);
-    w3[3] = swap32_S (w[15]);
+    w0[0] = hc_swap32_S (w[ 0]);
+    w0[1] = hc_swap32_S (w[ 1]);
+    w0[2] = hc_swap32_S (w[ 2]);
+    w0[3] = hc_swap32_S (w[ 3]);
+    w1[0] = hc_swap32_S (w[ 4]);
+    w1[1] = hc_swap32_S (w[ 5]);
+    w1[2] = hc_swap32_S (w[ 6]);
+    w1[3] = hc_swap32_S (w[ 7]);
+    w2[0] = hc_swap32_S (w[ 8]);
+    w2[1] = hc_swap32_S (w[ 9]);
+    w2[2] = hc_swap32_S (w[10]);
+    w2[3] = hc_swap32_S (w[11]);
+    w3[0] = hc_swap32_S (w[12]);
+    w3[1] = hc_swap32_S (w[13]);
+    w3[2] = hc_swap32_S (w[14]);
+    w3[3] = hc_swap32_S (w[15]);
   }
 
   streebog256_hmac_init_64 (ctx, w0, w1, w2, w3, s_sbob_sl64);
@@ -1267,7 +1265,7 @@ DECLSPEC void streebog256_hmac_update_swap (streebog256_hmac_ctx_t *ctx, const u
   streebog256_update_swap (&ctx->ipad, w, len);
 }
 
-DECLSPEC void streebog256_hmac_update_global_swap (streebog256_hmac_ctx_t *ctx, const __global u32 *w, const int len)
+DECLSPEC void streebog256_hmac_update_global_swap (streebog256_hmac_ctx_t *ctx, GLOBAL_AS const u32 *w, const int len)
 {
   streebog256_update_global_swap (&ctx->ipad, w, len);
 }
@@ -1276,51 +1274,27 @@ DECLSPEC void streebog256_hmac_final (streebog256_hmac_ctx_t *ctx)
 {
   streebog256_final (&ctx->ipad);
 
-  u32 t0[4];
-  u32 t1[4];
-  u32 t2[4];
-  u32 t3[4];
+  ctx->opad.w0[0] = h32_from_64_S (ctx->ipad.h[3]);
+  ctx->opad.w0[1] = l32_from_64_S (ctx->ipad.h[3]);
+  ctx->opad.w0[2] = h32_from_64_S (ctx->ipad.h[2]);
+  ctx->opad.w0[3] = l32_from_64_S (ctx->ipad.h[2]);
+  ctx->opad.w1[0] = h32_from_64_S (ctx->ipad.h[1]);
+  ctx->opad.w1[1] = l32_from_64_S (ctx->ipad.h[1]);
+  ctx->opad.w1[2] = h32_from_64_S (ctx->ipad.h[0]);
+  ctx->opad.w1[3] = l32_from_64_S (ctx->ipad.h[0]);
+  ctx->opad.w2[0] = 0;
+  ctx->opad.w2[1] = 0;
+  ctx->opad.w2[2] = 0;
+  ctx->opad.w2[3] = 0;
+  ctx->opad.w3[0] = 0;
+  ctx->opad.w3[1] = 0;
+  ctx->opad.w3[2] = 0;
+  ctx->opad.w3[3] = 0;
 
-  t0[0] = h32_from_64_S (ctx->ipad.h[3]);
-  t0[1] = l32_from_64_S (ctx->ipad.h[3]);
-  t0[2] = h32_from_64_S (ctx->ipad.h[2]);
-  t0[3] = l32_from_64_S (ctx->ipad.h[2]);
-  t1[0] = h32_from_64_S (ctx->ipad.h[1]);
-  t1[1] = l32_from_64_S (ctx->ipad.h[1]);
-  t1[2] = h32_from_64_S (ctx->ipad.h[0]);
-  t1[3] = l32_from_64_S (ctx->ipad.h[0]);
-  t2[0] = 0;
-  t2[1] = 0;
-  t2[2] = 0;
-  t2[3] = 0;
-  t3[0] = 0;
-  t3[1] = 0;
-  t3[2] = 0;
-  t3[3] = 0;
-
-  streebog256_update_64 (&ctx->opad, t0, t1, t2, t3, 32);
+  ctx->opad.len += 32;
 
   streebog256_final (&ctx->opad);
 }
-
-typedef struct streebog256_ctx_vector
-{
-  u64x h[8];
-
-  u64x s[8];
-
-  u64x n[8];
-
-  u32x w0[4];
-  u32x w1[4];
-  u32x w2[4];
-  u32x w3[4];
-
-  int len;
-
-  SHM_TYPE u64a (*s_sbob_sl64)[256];
-
-} streebog256_ctx_vector_t;
 
 DECLSPEC void streebog256_init_vector (streebog256_ctx_vector_t *ctx, SHM_TYPE u64a (*s_sbob_sl64)[256])
 {
@@ -1385,13 +1359,13 @@ DECLSPEC void streebog256_add_vector (u64x *x, const u64x *y)
   #endif
   for (int i = 7; i >=0; i--)
   {
-    const u64x left  = swap64 (x[i]);
-    const u64x right = swap64 (y[i]);
+    const u64x left  = hc_swap64 (x[i]);
+    const u64x right = hc_swap64 (y[i]);
     const u64x sum   = left + right + carry;
 
-    carry = (sum < left) ? (u64x) 1 : (u64x) 0;
+    carry = (sum < left) ? make_u64x (1) : make_u64x (0);
 
-    x[i] = swap64 (sum);
+    x[i] = hc_swap64 (sum);
   }
 }
 
@@ -1442,7 +1416,7 @@ DECLSPEC void streebog256_g_vector (u64x *h, const u64x *n, const u64x *m, SHM_T
 
     for (int i = 0; i < 8; i++)
     {
-      t[i] = k[i] ^ sbob_rc64[r][i];
+      t[i] = k[i] ^ sbob256_rc64[r][i];
     }
 
     #ifdef _unroll
@@ -1487,77 +1461,119 @@ DECLSPEC void streebog256_transform_vector (streebog256_ctx_vector_t *ctx, const
 
 DECLSPEC void streebog256_update_vector_64 (streebog256_ctx_vector_t *ctx, u32x *w0, u32x *w1, u32x *w2, u32x *w3, const int len)
 {
-  const int pos = ctx->len;
+  MAYBE_VOLATILE const int pos = ctx->len & 63;
 
-  if ((pos + len) < 64)
+  ctx->len += len;
+
+  if (pos == 0)
   {
-    switch_buffer_by_offset_be (w0, w1, w2, w3, pos);
+    ctx->w0[0] = w0[0];
+    ctx->w0[1] = w0[1];
+    ctx->w0[2] = w0[2];
+    ctx->w0[3] = w0[3];
+    ctx->w1[0] = w1[0];
+    ctx->w1[1] = w1[1];
+    ctx->w1[2] = w1[2];
+    ctx->w1[3] = w1[3];
+    ctx->w2[0] = w2[0];
+    ctx->w2[1] = w2[1];
+    ctx->w2[2] = w2[2];
+    ctx->w2[3] = w2[3];
+    ctx->w3[0] = w3[0];
+    ctx->w3[1] = w3[1];
+    ctx->w3[2] = w3[2];
+    ctx->w3[3] = w3[3];
 
-    ctx->w0[0] |= w0[0];
-    ctx->w0[1] |= w0[1];
-    ctx->w0[2] |= w0[2];
-    ctx->w0[3] |= w0[3];
-    ctx->w1[0] |= w1[0];
-    ctx->w1[1] |= w1[1];
-    ctx->w1[2] |= w1[2];
-    ctx->w1[3] |= w1[3];
-    ctx->w2[0] |= w2[0];
-    ctx->w2[1] |= w2[1];
-    ctx->w2[2] |= w2[2];
-    ctx->w2[3] |= w2[3];
-    ctx->w3[0] |= w3[0];
-    ctx->w3[1] |= w3[1];
-    ctx->w3[2] |= w3[2];
-    ctx->w3[3] |= w3[3];
+    if (len == 64)
+    {
+      streebog256_transform_vector (ctx, ctx->w0, ctx->w1, ctx->w2, ctx->w3);
 
-    ctx->len += len;
+      ctx->w0[0] = 0;
+      ctx->w0[1] = 0;
+      ctx->w0[2] = 0;
+      ctx->w0[3] = 0;
+      ctx->w1[0] = 0;
+      ctx->w1[1] = 0;
+      ctx->w1[2] = 0;
+      ctx->w1[3] = 0;
+      ctx->w2[0] = 0;
+      ctx->w2[1] = 0;
+      ctx->w2[2] = 0;
+      ctx->w2[3] = 0;
+      ctx->w3[0] = 0;
+      ctx->w3[1] = 0;
+      ctx->w3[2] = 0;
+      ctx->w3[3] = 0;
+    }
   }
   else
   {
-    u32x c0[4] = { 0 };
-    u32x c1[4] = { 0 };
-    u32x c2[4] = { 0 };
-    u32x c3[4] = { 0 };
+    if ((pos + len) < 64)
+    {
+      switch_buffer_by_offset_be (w0, w1, w2, w3, pos);
 
-    switch_buffer_by_offset_carry_be (w0, w1, w2, w3, c0, c1, c2, c3, pos);
+      ctx->w0[0] |= w0[0];
+      ctx->w0[1] |= w0[1];
+      ctx->w0[2] |= w0[2];
+      ctx->w0[3] |= w0[3];
+      ctx->w1[0] |= w1[0];
+      ctx->w1[1] |= w1[1];
+      ctx->w1[2] |= w1[2];
+      ctx->w1[3] |= w1[3];
+      ctx->w2[0] |= w2[0];
+      ctx->w2[1] |= w2[1];
+      ctx->w2[2] |= w2[2];
+      ctx->w2[3] |= w2[3];
+      ctx->w3[0] |= w3[0];
+      ctx->w3[1] |= w3[1];
+      ctx->w3[2] |= w3[2];
+      ctx->w3[3] |= w3[3];
+    }
+    else
+    {
+      u32x c0[4] = { 0 };
+      u32x c1[4] = { 0 };
+      u32x c2[4] = { 0 };
+      u32x c3[4] = { 0 };
 
-    ctx->w0[0] |= w0[0];
-    ctx->w0[1] |= w0[1];
-    ctx->w0[2] |= w0[2];
-    ctx->w0[3] |= w0[3];
-    ctx->w1[0] |= w1[0];
-    ctx->w1[1] |= w1[1];
-    ctx->w1[2] |= w1[2];
-    ctx->w1[3] |= w1[3];
-    ctx->w2[0] |= w2[0];
-    ctx->w2[1] |= w2[1];
-    ctx->w2[2] |= w2[2];
-    ctx->w2[3] |= w2[3];
-    ctx->w3[0] |= w3[0];
-    ctx->w3[1] |= w3[1];
-    ctx->w3[2] |= w3[2];
-    ctx->w3[3] |= w3[3];
+      switch_buffer_by_offset_carry_be (w0, w1, w2, w3, c0, c1, c2, c3, pos);
 
-    streebog256_transform_vector (ctx, ctx->w0, ctx->w1, ctx->w2, ctx->w3);
+      ctx->w0[0] |= w0[0];
+      ctx->w0[1] |= w0[1];
+      ctx->w0[2] |= w0[2];
+      ctx->w0[3] |= w0[3];
+      ctx->w1[0] |= w1[0];
+      ctx->w1[1] |= w1[1];
+      ctx->w1[2] |= w1[2];
+      ctx->w1[3] |= w1[3];
+      ctx->w2[0] |= w2[0];
+      ctx->w2[1] |= w2[1];
+      ctx->w2[2] |= w2[2];
+      ctx->w2[3] |= w2[3];
+      ctx->w3[0] |= w3[0];
+      ctx->w3[1] |= w3[1];
+      ctx->w3[2] |= w3[2];
+      ctx->w3[3] |= w3[3];
 
-    ctx->w0[0] = c0[0];
-    ctx->w0[1] = c0[1];
-    ctx->w0[2] = c0[2];
-    ctx->w0[3] = c0[3];
-    ctx->w1[0] = c1[0];
-    ctx->w1[1] = c1[1];
-    ctx->w1[2] = c1[2];
-    ctx->w1[3] = c1[3];
-    ctx->w2[0] = c2[0];
-    ctx->w2[1] = c2[1];
-    ctx->w2[2] = c2[2];
-    ctx->w2[3] = c2[3];
-    ctx->w3[0] = c3[0];
-    ctx->w3[1] = c3[1];
-    ctx->w3[2] = c3[2];
-    ctx->w3[3] = c3[3];
+      streebog256_transform_vector (ctx, ctx->w0, ctx->w1, ctx->w2, ctx->w3);
 
-    ctx->len = (pos + len) & 63;
+      ctx->w0[0] = c0[0];
+      ctx->w0[1] = c0[1];
+      ctx->w0[2] = c0[2];
+      ctx->w0[3] = c0[3];
+      ctx->w1[0] = c1[0];
+      ctx->w1[1] = c1[1];
+      ctx->w1[2] = c1[2];
+      ctx->w1[3] = c1[3];
+      ctx->w2[0] = c2[0];
+      ctx->w2[1] = c2[1];
+      ctx->w2[2] = c2[2];
+      ctx->w2[3] = c2[3];
+      ctx->w3[0] = c3[0];
+      ctx->w3[1] = c3[1];
+      ctx->w3[2] = c3[2];
+      ctx->w3[3] = c3[3];
+    }
   }
 }
 
@@ -1629,22 +1645,22 @@ DECLSPEC void streebog256_update_vector_swap (streebog256_ctx_vector_t *ctx, con
 
   while (len > 63)
   {
-    w0[0] = swap32 (w[off +  0]);
-    w0[1] = swap32 (w[off +  1]);
-    w0[2] = swap32 (w[off +  2]);
-    w0[3] = swap32 (w[off +  3]);
-    w1[0] = swap32 (w[off +  4]);
-    w1[1] = swap32 (w[off +  5]);
-    w1[2] = swap32 (w[off +  6]);
-    w1[3] = swap32 (w[off +  7]);
-    w2[0] = swap32 (w[off +  8]);
-    w2[1] = swap32 (w[off +  9]);
-    w2[2] = swap32 (w[off + 10]);
-    w2[3] = swap32 (w[off + 11]);
-    w3[0] = swap32 (w[off + 12]);
-    w3[1] = swap32 (w[off + 13]);
-    w3[2] = swap32 (w[off + 14]);
-    w3[3] = swap32 (w[off + 15]);
+    w0[0] = hc_swap32 (w[off +  0]);
+    w0[1] = hc_swap32 (w[off +  1]);
+    w0[2] = hc_swap32 (w[off +  2]);
+    w0[3] = hc_swap32 (w[off +  3]);
+    w1[0] = hc_swap32 (w[off +  4]);
+    w1[1] = hc_swap32 (w[off +  5]);
+    w1[2] = hc_swap32 (w[off +  6]);
+    w1[3] = hc_swap32 (w[off +  7]);
+    w2[0] = hc_swap32 (w[off +  8]);
+    w2[1] = hc_swap32 (w[off +  9]);
+    w2[2] = hc_swap32 (w[off + 10]);
+    w2[3] = hc_swap32 (w[off + 11]);
+    w3[0] = hc_swap32 (w[off + 12]);
+    w3[1] = hc_swap32 (w[off + 13]);
+    w3[2] = hc_swap32 (w[off + 14]);
+    w3[3] = hc_swap32 (w[off + 15]);
 
     off += 16;
     len -= 64;
@@ -1654,22 +1670,22 @@ DECLSPEC void streebog256_update_vector_swap (streebog256_ctx_vector_t *ctx, con
 
   if (len > 0)
   {
-    w0[0] = swap32 (w[off +  0]);
-    w0[1] = swap32 (w[off +  1]);
-    w0[2] = swap32 (w[off +  2]);
-    w0[3] = swap32 (w[off +  3]);
-    w1[0] = swap32 (w[off +  4]);
-    w1[1] = swap32 (w[off +  5]);
-    w1[2] = swap32 (w[off +  6]);
-    w1[3] = swap32 (w[off +  7]);
-    w2[0] = swap32 (w[off +  8]);
-    w2[1] = swap32 (w[off +  9]);
-    w2[2] = swap32 (w[off + 10]);
-    w2[3] = swap32 (w[off + 11]);
-    w3[0] = swap32 (w[off + 12]);
-    w3[1] = swap32 (w[off + 13]);
-    w3[2] = swap32 (w[off + 14]);
-    w3[3] = swap32 (w[off + 15]);
+    w0[0] = hc_swap32 (w[off +  0]);
+    w0[1] = hc_swap32 (w[off +  1]);
+    w0[2] = hc_swap32 (w[off +  2]);
+    w0[3] = hc_swap32 (w[off +  3]);
+    w1[0] = hc_swap32 (w[off +  4]);
+    w1[1] = hc_swap32 (w[off +  5]);
+    w1[2] = hc_swap32 (w[off +  6]);
+    w1[3] = hc_swap32 (w[off +  7]);
+    w2[0] = hc_swap32 (w[off +  8]);
+    w2[1] = hc_swap32 (w[off +  9]);
+    w2[2] = hc_swap32 (w[off + 10]);
+    w2[3] = hc_swap32 (w[off + 11]);
+    w3[0] = hc_swap32 (w[off + 12]);
+    w3[1] = hc_swap32 (w[off + 13]);
+    w3[2] = hc_swap32 (w[off + 14]);
+    w3[3] = hc_swap32 (w[off + 15]);
 
     streebog256_update_vector_64 (ctx, w0, w1, w2, w3, len);
   }
@@ -1677,7 +1693,7 @@ DECLSPEC void streebog256_update_vector_swap (streebog256_ctx_vector_t *ctx, con
 
 DECLSPEC void streebog256_final_vector (streebog256_ctx_vector_t *ctx)
 {
-  const int pos = ctx->len & 63;
+  MAYBE_VOLATILE const int pos = ctx->len & 63;
 
   append_0x01_4x4_VV (ctx->w0, ctx->w1, ctx->w2, ctx->w3, pos ^ 3);
 
@@ -1695,7 +1711,7 @@ DECLSPEC void streebog256_final_vector (streebog256_ctx_vector_t *ctx)
   streebog256_g_vector (ctx->h, ctx->n, m, ctx->s_sbob_sl64);
 
   u64x sizebuf[8] = { 0 };
-  sizebuf[7] = swap64 ((u64x) (ctx->len << 3));
+  sizebuf[7] = hc_swap64 (make_u64x (pos << 3));
 
   streebog256_add_vector (ctx->n, sizebuf);
 
@@ -1707,13 +1723,6 @@ DECLSPEC void streebog256_final_vector (streebog256_ctx_vector_t *ctx)
 
   streebog256_g_vector (ctx->h, nullbuf, ctx->s, ctx->s_sbob_sl64);
 }
-
-typedef struct streebog256_hmac_ctx_vector
-{
-  streebog256_ctx_vector_t ipad;
-  streebog256_ctx_vector_t opad;
-
-} streebog256_hmac_ctx_vector_t;
 
 DECLSPEC void streebog256_hmac_init_vector_64 (streebog256_hmac_ctx_vector_t *ctx, const u32x *w0, const u32x *w1, const u32x *w2, const u32x *w3, SHM_TYPE u64a (*s_sbob_sl64)[256])
 {
@@ -1743,7 +1752,9 @@ DECLSPEC void streebog256_hmac_init_vector_64 (streebog256_hmac_ctx_vector_t *ct
 
   streebog256_init_vector (&ctx->ipad, s_sbob_sl64);
 
-  streebog256_update_vector_64 (&ctx->ipad, t0, t1, t2, t3, 64);
+  streebog256_transform_vector (&ctx->ipad, t0, t1, t2, t3);
+
+  ctx->ipad.len = 64;
 
   // opad
 
@@ -1766,7 +1777,9 @@ DECLSPEC void streebog256_hmac_init_vector_64 (streebog256_hmac_ctx_vector_t *ct
 
   streebog256_init_vector (&ctx->opad, s_sbob_sl64);
 
-  streebog256_update_vector_64 (&ctx->opad, t0, t1, t2, t3, 64);
+  streebog256_transform_vector (&ctx->opad, t0, t1, t2, t3);
+
+  ctx->opad.len = 64;
 }
 
 DECLSPEC void streebog256_hmac_init_vector (streebog256_hmac_ctx_vector_t *ctx, const u32x *w, const int len, SHM_TYPE u64a (*s_sbob_sl64)[256])
@@ -1862,22 +1875,22 @@ DECLSPEC void streebog256_hmac_init_vector_swap (streebog256_hmac_ctx_vector_t *
   }
   else
   {
-    w0[0] = swap32 (w[ 0]);
-    w0[1] = swap32 (w[ 1]);
-    w0[2] = swap32 (w[ 2]);
-    w0[3] = swap32 (w[ 3]);
-    w1[0] = swap32 (w[ 4]);
-    w1[1] = swap32 (w[ 5]);
-    w1[2] = swap32 (w[ 6]);
-    w1[3] = swap32 (w[ 7]);
-    w2[0] = swap32 (w[ 8]);
-    w2[1] = swap32 (w[ 9]);
-    w2[2] = swap32 (w[10]);
-    w2[3] = swap32 (w[11]);
-    w3[0] = swap32 (w[12]);
-    w3[1] = swap32 (w[13]);
-    w3[2] = swap32 (w[14]);
-    w3[3] = swap32 (w[15]);
+    w0[0] = hc_swap32 (w[ 0]);
+    w0[1] = hc_swap32 (w[ 1]);
+    w0[2] = hc_swap32 (w[ 2]);
+    w0[3] = hc_swap32 (w[ 3]);
+    w1[0] = hc_swap32 (w[ 4]);
+    w1[1] = hc_swap32 (w[ 5]);
+    w1[2] = hc_swap32 (w[ 6]);
+    w1[3] = hc_swap32 (w[ 7]);
+    w2[0] = hc_swap32 (w[ 8]);
+    w2[1] = hc_swap32 (w[ 9]);
+    w2[2] = hc_swap32 (w[10]);
+    w2[3] = hc_swap32 (w[11]);
+    w3[0] = hc_swap32 (w[12]);
+    w3[1] = hc_swap32 (w[13]);
+    w3[2] = hc_swap32 (w[14]);
+    w3[3] = hc_swap32 (w[15]);
   }
 
   streebog256_hmac_init_vector_64 (ctx, w0, w1, w2, w3, s_sbob_sl64);
@@ -1897,29 +1910,24 @@ DECLSPEC void streebog256_hmac_final_vector (streebog256_hmac_ctx_vector_t *ctx)
 {
   streebog256_final_vector (&ctx->ipad);
 
-  u32x t0[4];
-  u32x t1[4];
-  u32x t2[4];
-  u32x t3[4];
+  ctx->opad.w0[0] = h32_from_64 (ctx->ipad.h[3]);
+  ctx->opad.w0[1] = l32_from_64 (ctx->ipad.h[3]);
+  ctx->opad.w0[2] = h32_from_64 (ctx->ipad.h[2]);
+  ctx->opad.w0[3] = l32_from_64 (ctx->ipad.h[2]);
+  ctx->opad.w1[0] = h32_from_64 (ctx->ipad.h[1]);
+  ctx->opad.w1[1] = l32_from_64 (ctx->ipad.h[1]);
+  ctx->opad.w1[2] = h32_from_64 (ctx->ipad.h[0]);
+  ctx->opad.w1[3] = l32_from_64 (ctx->ipad.h[0]);
+  ctx->opad.w2[0] = 0;
+  ctx->opad.w2[1] = 0;
+  ctx->opad.w2[2] = 0;
+  ctx->opad.w2[3] = 0;
+  ctx->opad.w3[0] = 0;
+  ctx->opad.w3[1] = 0;
+  ctx->opad.w3[2] = 0;
+  ctx->opad.w3[3] = 0;
 
-  t0[0] = h32_from_64 (ctx->ipad.h[3]);
-  t0[1] = l32_from_64 (ctx->ipad.h[3]);
-  t0[2] = h32_from_64 (ctx->ipad.h[2]);
-  t0[3] = l32_from_64 (ctx->ipad.h[2]);
-  t1[0] = h32_from_64 (ctx->ipad.h[1]);
-  t1[1] = l32_from_64 (ctx->ipad.h[1]);
-  t1[2] = h32_from_64 (ctx->ipad.h[0]);
-  t1[3] = l32_from_64 (ctx->ipad.h[0]);
-  t2[0] = 0;
-  t2[1] = 0;
-  t2[2] = 0;
-  t2[3] = 0;
-  t3[0] = 0;
-  t3[1] = 0;
-  t3[2] = 0;
-  t3[3] = 0;
-
-  streebog256_update_vector_64 (&ctx->opad, t0, t1, t2, t3, 32);
+  ctx->opad.len += 32;
 
   streebog256_final_vector (&ctx->opad);
 }

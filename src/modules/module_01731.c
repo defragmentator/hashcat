@@ -9,7 +9,6 @@
 #include "bitops.h"
 #include "convert.h"
 #include "shared.h"
-#include "inc_hash_constants.h"
 
 static const u32   ATTACK_EXEC    = ATTACK_EXEC_INSIDE_KERNEL;
 static const u32   DGST_POS0      = 14;
@@ -149,8 +148,6 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     tmp[7] += SHA512M_H;
   }
 
-  const u32 *ptr = (const u32 *) tmp;
-
   char tmp_salt[SALT_MAX * 2];
 
   const int salt_len = generic_salt_encode (hashconfig, (const u8 *) salt->salt_buf, (const int) salt->salt_len, (u8 *) tmp_salt);
@@ -159,14 +156,14 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const int line_len = snprintf (line_buf, line_size, "0x0200%s%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x",
     tmp_salt,
-    ptr[ 1], ptr[ 0],
-    ptr[ 3], ptr[ 2],
-    ptr[ 5], ptr[ 4],
-    ptr[ 7], ptr[ 6],
-    ptr[ 9], ptr[ 8],
-    ptr[11], ptr[10],
-    ptr[13], ptr[12],
-    ptr[15], ptr[14]);
+    v32b_from_v64 (tmp[0]), v32a_from_v64 (tmp[0]),
+    v32b_from_v64 (tmp[1]), v32a_from_v64 (tmp[1]),
+    v32b_from_v64 (tmp[2]), v32a_from_v64 (tmp[2]),
+    v32b_from_v64 (tmp[3]), v32a_from_v64 (tmp[3]),
+    v32b_from_v64 (tmp[4]), v32a_from_v64 (tmp[4]),
+    v32b_from_v64 (tmp[5]), v32a_from_v64 (tmp[5]),
+    v32b_from_v64 (tmp[6]), v32a_from_v64 (tmp[6]),
+    v32b_from_v64 (tmp[7]), v32a_from_v64 (tmp[7]));
 
   return line_len;
 }
@@ -196,15 +193,18 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_hash_binary_count        = MODULE_DEFAULT;
   module_ctx->module_hash_binary_parse        = MODULE_DEFAULT;
   module_ctx->module_hash_binary_save         = MODULE_DEFAULT;
-  module_ctx->module_hash_decode_outfile      = MODULE_DEFAULT;
+  module_ctx->module_hash_decode_potfile      = MODULE_DEFAULT;
   module_ctx->module_hash_decode_zero_hash    = MODULE_DEFAULT;
   module_ctx->module_hash_decode              = module_hash_decode;
   module_ctx->module_hash_encode_status       = MODULE_DEFAULT;
+  module_ctx->module_hash_encode_potfile      = MODULE_DEFAULT;
   module_ctx->module_hash_encode              = module_hash_encode;
   module_ctx->module_hash_init_selftest       = MODULE_DEFAULT;
   module_ctx->module_hash_mode                = MODULE_DEFAULT;
   module_ctx->module_hash_category            = module_hash_category;
   module_ctx->module_hash_name                = module_hash_name;
+  module_ctx->module_hashes_count_min         = MODULE_DEFAULT;
+  module_ctx->module_hashes_count_max         = MODULE_DEFAULT;
   module_ctx->module_hlfmt_disable            = MODULE_DEFAULT;
   module_ctx->module_hook12                   = MODULE_DEFAULT;
   module_ctx->module_hook23                   = MODULE_DEFAULT;
@@ -224,6 +224,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_opts_type                = module_opts_type;
   module_ctx->module_outfile_check_disable    = MODULE_DEFAULT;
   module_ctx->module_outfile_check_nocomp     = MODULE_DEFAULT;
+  module_ctx->module_potfile_custom_check     = MODULE_DEFAULT;
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;

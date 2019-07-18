@@ -6,8 +6,8 @@
 #include "common.h"
 #include "types.h"
 #include "memory.h"
-#include "bitmap.h"
 #include "event.h"
+#include "bitmap.h"
 
 static void selftest_to_bitmap (const u32 dgst_shifts, char *digests_buf_ptr, const u32 dgst_pos0, const u32 dgst_pos1, const u32 dgst_pos2, const u32 dgst_pos3, const u32 bitmap_mask, u32 *bitmap_a, u32 *bitmap_b, u32 *bitmap_c, u32 *bitmap_d)
 {
@@ -82,7 +82,7 @@ int bitmap_ctx_init (hashcat_ctx_t *hashcat_ctx)
   if (user_options->example_hashes == true) return 0;
   if (user_options->keyspace       == true) return 0;
   if (user_options->left           == true) return 0;
-  if (user_options->opencl_info    == true) return 0;
+  if (user_options->backend_info   == true) return 0;
   if (user_options->show           == true) return 0;
   if (user_options->usage          == true) return 0;
   if (user_options->version        == true) return 0;

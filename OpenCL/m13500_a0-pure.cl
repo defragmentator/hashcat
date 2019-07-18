@@ -5,17 +5,28 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp.h"
 #include "inc_rp.cl"
 #include "inc_scalar.cl"
 #include "inc_hash_sha1.cl"
+#endif
 
-__kernel void m13500_mxx (KERN_ATTR_RULES_ESALT (pstoken_t))
+typedef struct pstoken
+{
+  u32 salt_buf[128];
+  u32 salt_len;
+
+  u32 pc_digest[5];
+  u32 pc_offset;
+
+} pstoken_t;
+
+KERNEL_FQ void m13500_mxx (KERN_ATTR_RULES_ESALT (pstoken_t))
 {
   /**
    * modifier
@@ -40,22 +51,22 @@ __kernel void m13500_mxx (KERN_ATTR_RULES_ESALT (pstoken_t))
   ctx0.h[3] = esalt_bufs[digests_offset].pc_digest[3];
   ctx0.h[4] = esalt_bufs[digests_offset].pc_digest[4];
 
-  ctx0.w0[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  0]);
-  ctx0.w0[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  1]);
-  ctx0.w0[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  2]);
-  ctx0.w0[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  3]);
-  ctx0.w1[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  4]);
-  ctx0.w1[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  5]);
-  ctx0.w1[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  6]);
-  ctx0.w1[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  7]);
-  ctx0.w2[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  8]);
-  ctx0.w2[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  9]);
-  ctx0.w2[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 10]);
-  ctx0.w2[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 11]);
-  ctx0.w3[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 12]);
-  ctx0.w3[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 13]);
-  ctx0.w3[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 14]);
-  ctx0.w3[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 15]);
+  ctx0.w0[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  0]);
+  ctx0.w0[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  1]);
+  ctx0.w0[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  2]);
+  ctx0.w0[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  3]);
+  ctx0.w1[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  4]);
+  ctx0.w1[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  5]);
+  ctx0.w1[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  6]);
+  ctx0.w1[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  7]);
+  ctx0.w2[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  8]);
+  ctx0.w2[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  9]);
+  ctx0.w2[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 10]);
+  ctx0.w2[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 11]);
+  ctx0.w3[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 12]);
+  ctx0.w3[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 13]);
+  ctx0.w3[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 14]);
+  ctx0.w3[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 15]);
 
   ctx0.len = esalt_bufs[digests_offset].salt_len;
 
@@ -90,7 +101,7 @@ __kernel void m13500_mxx (KERN_ATTR_RULES_ESALT (pstoken_t))
   }
 }
 
-__kernel void m13500_sxx (KERN_ATTR_RULES_ESALT (pstoken_t))
+KERNEL_FQ void m13500_sxx (KERN_ATTR_RULES_ESALT (pstoken_t))
 {
   /**
    * modifier
@@ -127,22 +138,22 @@ __kernel void m13500_sxx (KERN_ATTR_RULES_ESALT (pstoken_t))
   ctx0.h[3] = esalt_bufs[digests_offset].pc_digest[3];
   ctx0.h[4] = esalt_bufs[digests_offset].pc_digest[4];
 
-  ctx0.w0[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  0]);
-  ctx0.w0[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  1]);
-  ctx0.w0[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  2]);
-  ctx0.w0[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  3]);
-  ctx0.w1[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  4]);
-  ctx0.w1[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  5]);
-  ctx0.w1[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  6]);
-  ctx0.w1[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  7]);
-  ctx0.w2[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  8]);
-  ctx0.w2[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  9]);
-  ctx0.w2[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 10]);
-  ctx0.w2[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 11]);
-  ctx0.w3[0] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 12]);
-  ctx0.w3[1] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 13]);
-  ctx0.w3[2] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 14]);
-  ctx0.w3[3] = swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 15]);
+  ctx0.w0[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  0]);
+  ctx0.w0[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  1]);
+  ctx0.w0[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  2]);
+  ctx0.w0[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  3]);
+  ctx0.w1[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  4]);
+  ctx0.w1[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  5]);
+  ctx0.w1[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  6]);
+  ctx0.w1[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  7]);
+  ctx0.w2[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  8]);
+  ctx0.w2[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset +  9]);
+  ctx0.w2[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 10]);
+  ctx0.w2[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 11]);
+  ctx0.w3[0] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 12]);
+  ctx0.w3[1] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 13]);
+  ctx0.w3[2] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 14]);
+  ctx0.w3[3] = hc_swap32_S (esalt_bufs[digests_offset].salt_buf[pc_offset + 15]);
 
   ctx0.len = esalt_bufs[digests_offset].salt_len;
 

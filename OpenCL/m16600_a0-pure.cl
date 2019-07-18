@@ -5,18 +5,27 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp.h"
 #include "inc_rp.cl"
 #include "inc_scalar.cl"
 #include "inc_hash_sha256.cl"
 #include "inc_cipher_aes.cl"
+#endif
 
-__kernel void m16600_mxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
+typedef struct electrum_wallet
+{
+  u32 salt_type;
+  u32 iv[4];
+  u32 encrypted[4];
+
+} electrum_wallet_t;
+
+KERNEL_FQ void m16600_mxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 {
   /**
    * base
@@ -32,17 +41,17 @@ __kernel void m16600_mxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -59,21 +68,21 @@ __kernel void m16600_mxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -138,20 +147,20 @@ __kernel void m16600_mxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
     u32 ukey[8];
 
-    ukey[0] = swap32_S (a);
-    ukey[1] = swap32_S (b);
-    ukey[2] = swap32_S (c);
-    ukey[3] = swap32_S (d);
-    ukey[4] = swap32_S (e);
-    ukey[5] = swap32_S (f);
-    ukey[6] = swap32_S (g);
-    ukey[7] = swap32_S (h);
+    ukey[0] = hc_swap32_S (a);
+    ukey[1] = hc_swap32_S (b);
+    ukey[2] = hc_swap32_S (c);
+    ukey[3] = hc_swap32_S (d);
+    ukey[4] = hc_swap32_S (e);
+    ukey[5] = hc_swap32_S (f);
+    ukey[6] = hc_swap32_S (g);
+    ukey[7] = hc_swap32_S (h);
 
     #define KEYLEN 60
 
     u32 ks[KEYLEN];
 
-    aes256_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4);
+    aes256_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_td0, s_td1, s_td2, s_td3);
 
     u32 encrypted[4];
 
@@ -185,7 +194,7 @@ __kernel void m16600_mxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
       if (atomic_inc (&hashes_shown[digests_offset]) == 0)
       {
-        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
       }
     }
 
@@ -201,13 +210,34 @@ __kernel void m16600_mxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
       if (atomic_inc (&hashes_shown[digests_offset]) == 0)
       {
-        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
+      }
+    }
+
+    if (esalt_bufs[digests_offset].salt_type == 3)
+    {
+      // check PKCS7 padding (either 13 times 0x0d or 12 times 0x0c at the end, we only check 12 bytes, it's enough):
+
+      if ((out[1] == 0x0c0c0c0c) && (out[2] == 0x0c0c0c0c) && (out[3] == 0x0c0c0c0c))
+      {
+        if (atomic_inc (&hashes_shown[digests_offset]) == 0)
+        {
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
+        }
+      }
+
+      if ((out[1] == 0x0d0d0d0d) && (out[2] == 0x0d0d0d0d) && (out[3] == 0x0d0d0d0d))
+      {
+        if (atomic_inc (&hashes_shown[digests_offset]) == 0)
+        {
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
+        }
       }
     }
   }
 }
 
-__kernel void m16600_sxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
+KERNEL_FQ void m16600_sxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 {
   /**
    * base
@@ -223,17 +253,17 @@ __kernel void m16600_sxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -250,21 +280,21 @@ __kernel void m16600_sxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -329,20 +359,20 @@ __kernel void m16600_sxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
     u32 ukey[8];
 
-    ukey[0] = swap32_S (a);
-    ukey[1] = swap32_S (b);
-    ukey[2] = swap32_S (c);
-    ukey[3] = swap32_S (d);
-    ukey[4] = swap32_S (e);
-    ukey[5] = swap32_S (f);
-    ukey[6] = swap32_S (g);
-    ukey[7] = swap32_S (h);
+    ukey[0] = hc_swap32_S (a);
+    ukey[1] = hc_swap32_S (b);
+    ukey[2] = hc_swap32_S (c);
+    ukey[3] = hc_swap32_S (d);
+    ukey[4] = hc_swap32_S (e);
+    ukey[5] = hc_swap32_S (f);
+    ukey[6] = hc_swap32_S (g);
+    ukey[7] = hc_swap32_S (h);
 
     #define KEYLEN 60
 
     u32 ks[KEYLEN];
 
-    aes256_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4);
+    aes256_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_td0, s_td1, s_td2, s_td3);
 
     u32 encrypted[4];
 
@@ -376,7 +406,7 @@ __kernel void m16600_sxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
       if (atomic_inc (&hashes_shown[digests_offset]) == 0)
       {
-        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
       }
     }
 
@@ -392,7 +422,28 @@ __kernel void m16600_sxx (KERN_ATTR_RULES_ESALT (electrum_wallet_t))
 
       if (atomic_inc (&hashes_shown[digests_offset]) == 0)
       {
-        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+        mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
+      }
+    }
+
+    if (esalt_bufs[digests_offset].salt_type == 3)
+    {
+      // check PKCS7 padding (either 13 times 0x0d or 12 times 0x0c at the end, we only check 12 bytes, it's enough):
+
+      if ((out[1] == 0x0c0c0c0c) && (out[2] == 0x0c0c0c0c) && (out[3] == 0x0c0c0c0c))
+      {
+        if (atomic_inc (&hashes_shown[digests_offset]) == 0)
+        {
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
+        }
+      }
+
+      if ((out[1] == 0x0d0d0d0d) && (out[2] == 0x0d0d0d0d) && (out[3] == 0x0d0d0d0d))
+      {
+        if (atomic_inc (&hashes_shown[digests_offset]) == 0)
+        {
+          mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
+        }
       }
     }
   }

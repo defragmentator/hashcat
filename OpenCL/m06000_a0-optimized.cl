@@ -5,22 +5,23 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
 #include "inc_hash_ripemd160.cl"
+#endif
 
 DECLSPEC void ripemd160_transform_transport_vector (const u32x *w, u32x *dgst)
 {
   ripemd160_transform_vector (w + 0, w + 4, w + 8, w + 12, dgst);
 }
 
-__kernel void m06000_m04 (KERN_ATTR_RULES_ESALT (netntlm_t))
+KERNEL_FQ void m06000_m04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -61,7 +62,7 @@ __kernel void m06000_m04 (KERN_ATTR_RULES_ESALT (netntlm_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x80_2x4_VV (w0, w1, out_len);
 
@@ -102,15 +103,15 @@ __kernel void m06000_m04 (KERN_ATTR_RULES_ESALT (netntlm_t))
   }
 }
 
-__kernel void m06000_m08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06000_m08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m06000_m16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06000_m16 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m06000_s04 (KERN_ATTR_RULES_ESALT (netntlm_t))
+KERNEL_FQ void m06000_s04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -163,7 +164,7 @@ __kernel void m06000_s04 (KERN_ATTR_RULES_ESALT (netntlm_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x80_2x4_VV (w0, w1, out_len);
 
@@ -204,10 +205,10 @@ __kernel void m06000_s04 (KERN_ATTR_RULES_ESALT (netntlm_t))
   }
 }
 
-__kernel void m06000_s08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06000_s08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m06000_s16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06000_s16 (KERN_ATTR_RULES ())
 {
 }

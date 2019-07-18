@@ -3,17 +3,18 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_md5.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
-__constant u32a padding[8] =
+CONSTANT_VK u32a padding[8] =
 {
   0x5e4ebf28,
   0x418a754e,
@@ -25,6 +26,34 @@ __constant u32a padding[8] =
   0x7a695364
 };
 
+typedef struct pdf
+{
+  int  V;
+  int  R;
+  int  P;
+
+  int  enc_md;
+
+  u32  id_buf[8];
+  u32  u_buf[32];
+  u32  o_buf[32];
+
+  int  id_len;
+  int  o_len;
+  int  u_len;
+
+  u32  rc4key[2];
+  u32  rc4data[2];
+
+} pdf_t;
+
+typedef struct pdf14_tmp
+{
+  u32 digest[4];
+  u32 out[4];
+
+} pdf14_tmp_t;
+
 typedef struct
 {
   u8 S[256];
@@ -33,7 +62,7 @@ typedef struct
 
 } RC4_KEY;
 
-DECLSPEC void swap (__local RC4_KEY *rc4_key, const u8 i, const u8 j)
+DECLSPEC void swap (LOCAL_AS RC4_KEY *rc4_key, const u8 i, const u8 j)
 {
   u8 tmp;
 
@@ -42,12 +71,12 @@ DECLSPEC void swap (__local RC4_KEY *rc4_key, const u8 i, const u8 j)
   rc4_key->S[j] = tmp;
 }
 
-DECLSPEC void rc4_init_16 (__local RC4_KEY *rc4_key, const u32 *data)
+DECLSPEC void rc4_init_16 (LOCAL_AS RC4_KEY *rc4_key, const u32 *data)
 {
   u32 v = 0x03020100;
   u32 a = 0x04040404;
 
-  __local u32 *ptr = (__local u32 *) rc4_key->S;
+  LOCAL_AS u32 *ptr = (LOCAL_AS u32 *) rc4_key->S;
 
   #ifdef _unroll
   #pragma unroll
@@ -98,7 +127,7 @@ DECLSPEC void rc4_init_16 (__local RC4_KEY *rc4_key, const u32 *data)
   }
 }
 
-DECLSPEC u8 rc4_next_16 (__local RC4_KEY *rc4_key, u8 i, u8 j, const u32 *in, u32 *out)
+DECLSPEC u8 rc4_next_16 (LOCAL_AS RC4_KEY *rc4_key, u8 i, u8 j, const u32 *in, u32 *out)
 {
   #ifdef _unroll
   #pragma unroll
@@ -151,7 +180,7 @@ DECLSPEC u8 rc4_next_16 (__local RC4_KEY *rc4_key, u8 i, u8 j, const u32 *in, u3
   return j;
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_init (KERN_ATTR_TMPS_ESALT (pdf14_tmp_t, pdf_t))
+KERNEL_FQ void m10500_init (KERN_ATTR_TMPS_ESALT (pdf14_tmp_t, pdf_t))
 {
   /**
    * base
@@ -182,8 +211,8 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_init (KERN_
    * shared
    */
 
-  //__local RC4_KEY rc4_keys[64];
-  //__local RC4_KEY *rc4_key = &rc4_keys[lid];
+  //LOCAL_AS RC4_KEY rc4_keys[64];
+  //LOCAL_AS RC4_KEY *rc4_key = &rc4_keys[lid];
 
   /**
    * U_buf
@@ -333,7 +362,7 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_init (KERN_
   tmps[gid].out[3] = 0;
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_loop (KERN_ATTR_TMPS_ESALT (pdf14_tmp_t, pdf_t))
+KERNEL_FQ void m10500_loop (KERN_ATTR_TMPS_ESALT (pdf14_tmp_t, pdf_t))
 {
   /**
    * base
@@ -348,9 +377,9 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_loop (KERN_
    * shared
    */
 
-  __local RC4_KEY rc4_keys[64];
+  LOCAL_VK RC4_KEY rc4_keys[64];
 
-  __local RC4_KEY *rc4_key = &rc4_keys[lid];
+  LOCAL_AS RC4_KEY *rc4_key = &rc4_keys[lid];
 
   /**
    * loop
@@ -436,7 +465,7 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_loop (KERN_
   tmps[gid].out[3] = out[3];
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_comp (KERN_ATTR_TMPS_ESALT (pdf14_tmp_t, pdf_t))
+KERNEL_FQ void m10500_comp (KERN_ATTR_TMPS_ESALT (pdf14_tmp_t, pdf_t))
 {
   /**
    * modifier
@@ -459,5 +488,7 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m10500_comp (KERN_
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

@@ -5,11 +5,12 @@
  *             : sboxes for others were takes fron JtR, license below
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single_bs.cl"
 #define COMPARE_M "inc_comp_multi_bs.cl"
@@ -1885,7 +1886,7 @@ DECLSPEC void transpose32c (u32 *data)
 // transpose bitslice mod : attention race conditions, need different buffers for *in and *out
 //
 
-__kernel void m01500_tm (__global u32 * restrict mod, __global bs_word_t * restrict words_buf_r)
+KERNEL_FQ void m01500_tm (GLOBAL_AS u32 *mod, GLOBAL_AS bs_word_t *words_buf_b)
 {
   const u64 gid = get_global_id (0);
 
@@ -1901,17 +1902,17 @@ __kernel void m01500_tm (__global u32 * restrict mod, __global bs_word_t * restr
   #endif
   for (int i = 0, j = 0; i < 32; i += 8, j += 7)
   {
-    atomic_or (&words_buf_r[block].b[j + 0], (((w0s >> (i + 7)) & 1) << slice));
-    atomic_or (&words_buf_r[block].b[j + 1], (((w0s >> (i + 6)) & 1) << slice));
-    atomic_or (&words_buf_r[block].b[j + 2], (((w0s >> (i + 5)) & 1) << slice));
-    atomic_or (&words_buf_r[block].b[j + 3], (((w0s >> (i + 4)) & 1) << slice));
-    atomic_or (&words_buf_r[block].b[j + 4], (((w0s >> (i + 3)) & 1) << slice));
-    atomic_or (&words_buf_r[block].b[j + 5], (((w0s >> (i + 2)) & 1) << slice));
-    atomic_or (&words_buf_r[block].b[j + 6], (((w0s >> (i + 1)) & 1) << slice));
+    atomic_or (&words_buf_b[block].b[j + 0], (((w0s >> (i + 7)) & 1) << slice));
+    atomic_or (&words_buf_b[block].b[j + 1], (((w0s >> (i + 6)) & 1) << slice));
+    atomic_or (&words_buf_b[block].b[j + 2], (((w0s >> (i + 5)) & 1) << slice));
+    atomic_or (&words_buf_b[block].b[j + 3], (((w0s >> (i + 4)) & 1) << slice));
+    atomic_or (&words_buf_b[block].b[j + 4], (((w0s >> (i + 3)) & 1) << slice));
+    atomic_or (&words_buf_b[block].b[j + 5], (((w0s >> (i + 2)) & 1) << slice));
+    atomic_or (&words_buf_b[block].b[j + 6], (((w0s >> (i + 1)) & 1) << slice));
   }
 }
 
-__kernel void m01500_mxx (KERN_ATTR_BITSLICE ())
+KERNEL_FQ void m01500_mxx (KERN_ATTR_BITSLICE ())
 {
   /**
    * base
@@ -1997,7 +1998,11 @@ __kernel void m01500_mxx (KERN_ATTR_BITSLICE ())
    * inner loop
    */
 
+  #ifdef IS_CUDA
+  const u32 pc_pos = (blockIdx.y * blockDim.y) + threadIdx.y;
+  #else
   const u32 pc_pos = get_global_id (1);
+  #endif
 
   const u32 il_pos = pc_pos * 32;
 
@@ -2030,34 +2035,34 @@ __kernel void m01500_mxx (KERN_ATTR_BITSLICE ())
   u32 k26 = K26;
   u32 k27 = K27;
 
-  k00 |= words_buf_r[pc_pos].b[ 0];
-  k01 |= words_buf_r[pc_pos].b[ 1];
-  k02 |= words_buf_r[pc_pos].b[ 2];
-  k03 |= words_buf_r[pc_pos].b[ 3];
-  k04 |= words_buf_r[pc_pos].b[ 4];
-  k05 |= words_buf_r[pc_pos].b[ 5];
-  k06 |= words_buf_r[pc_pos].b[ 6];
-  k07 |= words_buf_r[pc_pos].b[ 7];
-  k08 |= words_buf_r[pc_pos].b[ 8];
-  k09 |= words_buf_r[pc_pos].b[ 9];
-  k10 |= words_buf_r[pc_pos].b[10];
-  k11 |= words_buf_r[pc_pos].b[11];
-  k12 |= words_buf_r[pc_pos].b[12];
-  k13 |= words_buf_r[pc_pos].b[13];
-  k14 |= words_buf_r[pc_pos].b[14];
-  k15 |= words_buf_r[pc_pos].b[15];
-  k16 |= words_buf_r[pc_pos].b[16];
-  k17 |= words_buf_r[pc_pos].b[17];
-  k18 |= words_buf_r[pc_pos].b[18];
-  k19 |= words_buf_r[pc_pos].b[19];
-  k20 |= words_buf_r[pc_pos].b[20];
-  k21 |= words_buf_r[pc_pos].b[21];
-  k22 |= words_buf_r[pc_pos].b[22];
-  k23 |= words_buf_r[pc_pos].b[23];
-  k24 |= words_buf_r[pc_pos].b[24];
-  k25 |= words_buf_r[pc_pos].b[25];
-  k26 |= words_buf_r[pc_pos].b[26];
-  k27 |= words_buf_r[pc_pos].b[27];
+  k00 |= words_buf_s[pc_pos].b[ 0];
+  k01 |= words_buf_s[pc_pos].b[ 1];
+  k02 |= words_buf_s[pc_pos].b[ 2];
+  k03 |= words_buf_s[pc_pos].b[ 3];
+  k04 |= words_buf_s[pc_pos].b[ 4];
+  k05 |= words_buf_s[pc_pos].b[ 5];
+  k06 |= words_buf_s[pc_pos].b[ 6];
+  k07 |= words_buf_s[pc_pos].b[ 7];
+  k08 |= words_buf_s[pc_pos].b[ 8];
+  k09 |= words_buf_s[pc_pos].b[ 9];
+  k10 |= words_buf_s[pc_pos].b[10];
+  k11 |= words_buf_s[pc_pos].b[11];
+  k12 |= words_buf_s[pc_pos].b[12];
+  k13 |= words_buf_s[pc_pos].b[13];
+  k14 |= words_buf_s[pc_pos].b[14];
+  k15 |= words_buf_s[pc_pos].b[15];
+  k16 |= words_buf_s[pc_pos].b[16];
+  k17 |= words_buf_s[pc_pos].b[17];
+  k18 |= words_buf_s[pc_pos].b[18];
+  k19 |= words_buf_s[pc_pos].b[19];
+  k20 |= words_buf_s[pc_pos].b[20];
+  k21 |= words_buf_s[pc_pos].b[21];
+  k22 |= words_buf_s[pc_pos].b[22];
+  k23 |= words_buf_s[pc_pos].b[23];
+  k24 |= words_buf_s[pc_pos].b[24];
+  k25 |= words_buf_s[pc_pos].b[25];
+  k26 |= words_buf_s[pc_pos].b[26];
+  k27 |= words_buf_s[pc_pos].b[27];
 
   u32 D00 = 0;
   u32 D01 = 0;
@@ -2248,7 +2253,9 @@ __kernel void m01500_mxx (KERN_ATTR_BITSLICE ())
       const u32 r2 = 0;
       const u32 r3 = 0;
 
+      #ifdef KERNEL_STATIC
       #include COMPARE_M
+      #endif
     }
   }
   else
@@ -2276,14 +2283,16 @@ __kernel void m01500_mxx (KERN_ATTR_BITSLICE ())
       const u32 r0 = out0[31 - slice];
       const u32 r1 = out1[31 - slice];
       const u32 r2 = 0;
+      #ifdef KERNEL_STATIC
       const u32 r3 = 0;
+      #endif
 
       #include COMPARE_M
     }
   }
 }
 
-__kernel void m01500_sxx (KERN_ATTR_BITSLICE ())
+KERNEL_FQ void m01500_sxx (KERN_ATTR_BITSLICE ())
 {
   /**
    * base
@@ -2441,7 +2450,11 @@ __kernel void m01500_sxx (KERN_ATTR_BITSLICE ())
    * inner loop
    */
 
+  #ifdef IS_CUDA
+  const u32 pc_pos = (blockIdx.y * blockDim.y) + threadIdx.y;
+  #else
   const u32 pc_pos = get_global_id (1);
+  #endif
 
   const u32 il_pos = pc_pos * 32;
 
@@ -2474,34 +2487,34 @@ __kernel void m01500_sxx (KERN_ATTR_BITSLICE ())
   u32 k26 = K26;
   u32 k27 = K27;
 
-  k00 |= words_buf_r[pc_pos].b[ 0];
-  k01 |= words_buf_r[pc_pos].b[ 1];
-  k02 |= words_buf_r[pc_pos].b[ 2];
-  k03 |= words_buf_r[pc_pos].b[ 3];
-  k04 |= words_buf_r[pc_pos].b[ 4];
-  k05 |= words_buf_r[pc_pos].b[ 5];
-  k06 |= words_buf_r[pc_pos].b[ 6];
-  k07 |= words_buf_r[pc_pos].b[ 7];
-  k08 |= words_buf_r[pc_pos].b[ 8];
-  k09 |= words_buf_r[pc_pos].b[ 9];
-  k10 |= words_buf_r[pc_pos].b[10];
-  k11 |= words_buf_r[pc_pos].b[11];
-  k12 |= words_buf_r[pc_pos].b[12];
-  k13 |= words_buf_r[pc_pos].b[13];
-  k14 |= words_buf_r[pc_pos].b[14];
-  k15 |= words_buf_r[pc_pos].b[15];
-  k16 |= words_buf_r[pc_pos].b[16];
-  k17 |= words_buf_r[pc_pos].b[17];
-  k18 |= words_buf_r[pc_pos].b[18];
-  k19 |= words_buf_r[pc_pos].b[19];
-  k20 |= words_buf_r[pc_pos].b[20];
-  k21 |= words_buf_r[pc_pos].b[21];
-  k22 |= words_buf_r[pc_pos].b[22];
-  k23 |= words_buf_r[pc_pos].b[23];
-  k24 |= words_buf_r[pc_pos].b[24];
-  k25 |= words_buf_r[pc_pos].b[25];
-  k26 |= words_buf_r[pc_pos].b[26];
-  k27 |= words_buf_r[pc_pos].b[27];
+  k00 |= words_buf_s[pc_pos].b[ 0];
+  k01 |= words_buf_s[pc_pos].b[ 1];
+  k02 |= words_buf_s[pc_pos].b[ 2];
+  k03 |= words_buf_s[pc_pos].b[ 3];
+  k04 |= words_buf_s[pc_pos].b[ 4];
+  k05 |= words_buf_s[pc_pos].b[ 5];
+  k06 |= words_buf_s[pc_pos].b[ 6];
+  k07 |= words_buf_s[pc_pos].b[ 7];
+  k08 |= words_buf_s[pc_pos].b[ 8];
+  k09 |= words_buf_s[pc_pos].b[ 9];
+  k10 |= words_buf_s[pc_pos].b[10];
+  k11 |= words_buf_s[pc_pos].b[11];
+  k12 |= words_buf_s[pc_pos].b[12];
+  k13 |= words_buf_s[pc_pos].b[13];
+  k14 |= words_buf_s[pc_pos].b[14];
+  k15 |= words_buf_s[pc_pos].b[15];
+  k16 |= words_buf_s[pc_pos].b[16];
+  k17 |= words_buf_s[pc_pos].b[17];
+  k18 |= words_buf_s[pc_pos].b[18];
+  k19 |= words_buf_s[pc_pos].b[19];
+  k20 |= words_buf_s[pc_pos].b[20];
+  k21 |= words_buf_s[pc_pos].b[21];
+  k22 |= words_buf_s[pc_pos].b[22];
+  k23 |= words_buf_s[pc_pos].b[23];
+  k24 |= words_buf_s[pc_pos].b[24];
+  k25 |= words_buf_s[pc_pos].b[25];
+  k26 |= words_buf_s[pc_pos].b[26];
+  k27 |= words_buf_s[pc_pos].b[27];
 
   u32 D00 = 0;
   u32 D01 = 0;
@@ -2669,5 +2682,7 @@ __kernel void m01500_sxx (KERN_ATTR_BITSLICE ())
 
   const u32 slice = ffz (tmpResult);
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_S
+  #endif
 }

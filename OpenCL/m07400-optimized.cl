@@ -3,15 +3,26 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_sha256.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
+
+typedef struct sha256crypt_tmp
+{
+  // pure version
+
+  u32 alt_result[8];
+  u32 p_bytes[64];
+  u32 s_bytes[64];
+
+} sha256crypt_tmp_t;
 
 DECLSPEC void sha256_transform_transport (const u32 *w, u32 *digest)
 {
@@ -20,22 +31,22 @@ DECLSPEC void sha256_transform_transport (const u32 *w, u32 *digest)
   u32 w2[4];
   u32 w3[4];
 
-  w0[0] = swap32_S (w[ 0]);
-  w0[1] = swap32_S (w[ 1]);
-  w0[2] = swap32_S (w[ 2]);
-  w0[3] = swap32_S (w[ 3]);
-  w1[0] = swap32_S (w[ 4]);
-  w1[1] = swap32_S (w[ 5]);
-  w1[2] = swap32_S (w[ 6]);
-  w1[3] = swap32_S (w[ 7]);
-  w2[0] = swap32_S (w[ 8]);
-  w2[1] = swap32_S (w[ 9]);
-  w2[2] = swap32_S (w[10]);
-  w2[3] = swap32_S (w[11]);
-  w3[0] = swap32_S (w[12]);
-  w3[1] = swap32_S (w[13]);
-  w3[2] = swap32_S (w[14]);
-  w3[3] = swap32_S (w[15]);
+  w0[0] = hc_swap32_S (w[ 0]);
+  w0[1] = hc_swap32_S (w[ 1]);
+  w0[2] = hc_swap32_S (w[ 2]);
+  w0[3] = hc_swap32_S (w[ 3]);
+  w1[0] = hc_swap32_S (w[ 4]);
+  w1[1] = hc_swap32_S (w[ 5]);
+  w1[2] = hc_swap32_S (w[ 6]);
+  w1[3] = hc_swap32_S (w[ 7]);
+  w2[0] = hc_swap32_S (w[ 8]);
+  w2[1] = hc_swap32_S (w[ 9]);
+  w2[2] = hc_swap32_S (w[10]);
+  w2[3] = hc_swap32_S (w[11]);
+  w3[0] = hc_swap32_S (w[12]);
+  w3[1] = hc_swap32_S (w[13]);
+  w3[2] = hc_swap32_S (w[14]);
+  w3[3] = hc_swap32_S (w[15]);
 
   sha256_transform (w0, w1, w2, w3, digest);
 }
@@ -74,14 +85,14 @@ DECLSPEC void bzero16 (u32 *block)
 
 DECLSPEC void bswap8 (u32 *block)
 {
-  block[ 0] = swap32_S (block[ 0]);
-  block[ 1] = swap32_S (block[ 1]);
-  block[ 2] = swap32_S (block[ 2]);
-  block[ 3] = swap32_S (block[ 3]);
-  block[ 4] = swap32_S (block[ 4]);
-  block[ 5] = swap32_S (block[ 5]);
-  block[ 6] = swap32_S (block[ 6]);
-  block[ 7] = swap32_S (block[ 7]);
+  block[ 0] = hc_swap32_S (block[ 0]);
+  block[ 1] = hc_swap32_S (block[ 1]);
+  block[ 2] = hc_swap32_S (block[ 2]);
+  block[ 3] = hc_swap32_S (block[ 3]);
+  block[ 4] = hc_swap32_S (block[ 4]);
+  block[ 5] = hc_swap32_S (block[ 5]);
+  block[ 6] = hc_swap32_S (block[ 6]);
+  block[ 7] = hc_swap32_S (block[ 7]);
 }
 
 DECLSPEC u32 memcat16 (u32 *block, const u32 offset, const u32 *append, const u32 append_len)
@@ -91,10 +102,6 @@ DECLSPEC u32 memcat16 (u32 *block, const u32 offset, const u32 *append, const u3
   u32 tmp2;
   u32 tmp3;
   u32 tmp4;
-
-  const int offset_mod_4 = offset & 3;
-
-  const int offset_minus_4 = 4 - offset_mod_4;
 
   #if defined IS_AMD || defined IS_GENERIC
   u32 in0 = append[0];
@@ -110,6 +117,10 @@ DECLSPEC u32 memcat16 (u32 *block, const u32 offset, const u32 *append, const u3
   #endif
 
   #ifdef IS_NV
+  const int offset_mod_4 = offset & 3;
+
+  const int offset_minus_4 = 4 - offset_mod_4;
+
   const int selector = (0x76543210 >> (offset_minus_4 * 4)) & 0xffff;
 
   u32 in0 = append[0];
@@ -227,10 +238,6 @@ DECLSPEC u32 memcat16c (u32 *block, const u32 offset, const u32 *append, const u
   u32 tmp3;
   u32 tmp4;
 
-  const int offset_mod_4 = offset & 3;
-
-  const int offset_minus_4 = 4 - offset_mod_4;
-
   #if defined IS_AMD || defined IS_GENERIC
   u32 in0 = append[0];
   u32 in1 = append[1];
@@ -245,6 +252,10 @@ DECLSPEC u32 memcat16c (u32 *block, const u32 offset, const u32 *append, const u
   #endif
 
   #ifdef IS_NV
+  const int offset_mod_4 = offset & 3;
+
+  const int offset_minus_4 = 4 - offset_mod_4;
+
   const int selector = (0x76543210 >> (offset_minus_4 * 4)) & 0xffff;
 
   u32 in0 = append[0];
@@ -388,10 +399,6 @@ DECLSPEC u32 memcat20 (u32 *block, const u32 offset, const u32 *append, const u3
   u32 tmp3;
   u32 tmp4;
 
-  const int offset_mod_4 = offset & 3;
-
-  const int offset_minus_4 = 4 - offset_mod_4;
-
   #if defined IS_AMD || defined IS_GENERIC
   u32 in0 = append[0];
   u32 in1 = append[1];
@@ -406,6 +413,10 @@ DECLSPEC u32 memcat20 (u32 *block, const u32 offset, const u32 *append, const u3
   #endif
 
   #ifdef IS_NV
+  const int offset_mod_4 = offset & 3;
+
+  const int offset_minus_4 = 4 - offset_mod_4;
+
   const int selector = (0x76543210 >> (offset_minus_4 * 4)) & 0xffff;
 
   u32 in0 = append[0];
@@ -531,10 +542,6 @@ DECLSPEC u32 memcat20_x80 (u32 *block, const u32 offset, const u32 *append, cons
   u32 tmp3;
   u32 tmp4;
 
-  const int offset_mod_4 = offset & 3;
-
-  const int offset_minus_4 = 4 - offset_mod_4;
-
   #if defined IS_AMD || defined IS_GENERIC
   u32 in0 = append[0];
   u32 in1 = append[1];
@@ -550,6 +557,10 @@ DECLSPEC u32 memcat20_x80 (u32 *block, const u32 offset, const u32 *append, cons
   #endif
 
   #ifdef IS_NV
+  const int offset_mod_4 = offset & 3;
+
+  const int offset_minus_4 = 4 - offset_mod_4;
+
   const int selector = (0x76543210 >> (offset_minus_4 * 4)) & 0xffff;
 
   u32 in0 = append[0];
@@ -668,7 +679,7 @@ DECLSPEC u32 memcat20_x80 (u32 *block, const u32 offset, const u32 *append, cons
   return offset + append_len;
 }
 
-__kernel void m07400_init (KERN_ATTR_TMPS (sha256crypt_tmp_t))
+KERNEL_FQ void m07400_init (KERN_ATTR_TMPS (sha256crypt_tmp_t))
 {
   /**
    * base
@@ -733,7 +744,7 @@ __kernel void m07400_init (KERN_ATTR_TMPS (sha256crypt_tmp_t))
 
   append_0x80_1x16 (block, block_len);
 
-  block[15] = swap32_S (block_len * 8);
+  block[15] = hc_swap32_S (block_len * 8);
 
   init_ctx (alt_result);
 
@@ -815,7 +826,7 @@ __kernel void m07400_init (KERN_ATTR_TMPS (sha256crypt_tmp_t))
     bzero16 (block);
   }
 
-  block[15] = swap32_S (transform_len * 8);
+  block[15] = hc_swap32_S (transform_len * 8);
 
   sha256_transform_transport (block, alt_result);
 
@@ -860,7 +871,7 @@ __kernel void m07400_init (KERN_ATTR_TMPS (sha256crypt_tmp_t))
     bzero16 (block);
   }
 
-  block[15] = swap32_S (transform_len * 8);
+  block[15] = hc_swap32_S (transform_len * 8);
 
   sha256_transform_transport (block, p_bytes);
 
@@ -903,7 +914,7 @@ __kernel void m07400_init (KERN_ATTR_TMPS (sha256crypt_tmp_t))
     bzero16 (block);
   }
 
-  block[15] = swap32_S (transform_len * 8);
+  block[15] = hc_swap32_S (transform_len * 8);
 
   sha256_transform_transport (block, s_bytes);
 
@@ -917,7 +928,7 @@ __kernel void m07400_init (KERN_ATTR_TMPS (sha256crypt_tmp_t))
   tmps[gid].s_bytes[3] = s_bytes[3];
 }
 
-__kernel void m07400_loop (KERN_ATTR_TMPS (sha256crypt_tmp_t))
+KERNEL_FQ void m07400_loop (KERN_ATTR_TMPS (sha256crypt_tmp_t))
 {
   /**
    * base
@@ -1054,7 +1065,7 @@ __kernel void m07400_loop (KERN_ATTR_TMPS (sha256crypt_tmp_t))
       block[15] = 0;
     }
 
-    block[15] = swap32_S (block_len * 8);
+    block[15] = hc_swap32_S (block_len * 8);
 
     sha256_transform_transport (block, tmp);
 
@@ -1080,7 +1091,7 @@ __kernel void m07400_loop (KERN_ATTR_TMPS (sha256crypt_tmp_t))
   tmps[gid].alt_result[7] = alt_result[7];
 }
 
-__kernel void m07400_comp (KERN_ATTR_TMPS (sha256crypt_tmp_t))
+KERNEL_FQ void m07400_comp (KERN_ATTR_TMPS (sha256crypt_tmp_t))
 {
   /**
    * base
@@ -1099,5 +1110,7 @@ __kernel void m07400_comp (KERN_ATTR_TMPS (sha256crypt_tmp_t))
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

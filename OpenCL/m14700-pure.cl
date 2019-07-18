@@ -5,17 +5,35 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha1.cl"
 #include "inc_cipher_aes.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
+
+typedef struct itunes_backup
+{
+  u32 wpky[10];
+  u32 dpsl[5];
+
+} itunes_backup_t;
+
+typedef struct pbkdf2_sha1_tmp
+{
+  u32  ipad[5];
+  u32  opad[5];
+
+  u32  dgst[32];
+  u32  out[32];
+
+} pbkdf2_sha1_tmp_t;
 
 DECLSPEC void hmac_sha1_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, u32x *opad, u32x *digest)
 {
@@ -53,7 +71,7 @@ DECLSPEC void hmac_sha1_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipa
   sha1_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m14700_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backup_t))
+KERNEL_FQ void m14700_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backup_t))
 {
   /**
    * base
@@ -125,7 +143,7 @@ __kernel void m14700_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backu
   }
 }
 
-__kernel void m14700_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backup_t))
+KERNEL_FQ void m14700_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backup_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -210,7 +228,7 @@ __kernel void m14700_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backu
   }
 }
 
-__kernel void m14700_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backup_t))
+KERNEL_FQ void m14700_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backup_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -222,17 +240,17 @@ __kernel void m14700_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backu
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -249,21 +267,21 @@ __kernel void m14700_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backu
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -288,7 +306,7 @@ __kernel void m14700_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backu
 
   u32 ks[KEYLEN];
 
-  AES256_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4);
+  AES256_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_td0, s_td1, s_td2, s_td3);
 
   u32 cipher[4];
 
@@ -363,7 +381,7 @@ __kernel void m14700_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, itunes_backu
   {
     if (atomic_inc (&hashes_shown[digests_offset]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, 0, 0, 0);
     }
 
     return;

@@ -5,19 +5,38 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha256.cl"
 #include "inc_cipher_aes.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
-__constant u64a keccakf_rndc[24] =
+typedef struct ethereum_presale
+{
+  u32 iv[4];
+  u32 enc_seed[152];
+  u32 enc_seed_len;
+
+} ethereum_presale_t;
+
+typedef struct pbkdf2_sha256_tmp
+{
+  u32  ipad[8];
+  u32  opad[8];
+
+  u32  dgst[32];
+  u32  out[32];
+
+} pbkdf2_sha256_tmp_t;
+
+CONSTANT_VK u64a keccakf_rndc[24] =
 {
   0x0000000000000001, 0x0000000000008082, 0x800000000000808a,
   0x8000000080008000, 0x000000000000808b, 0x0000000080000001,
@@ -49,7 +68,7 @@ __constant u64a keccakf_rndc[24] =
   u32 j = keccakf_piln[s];      \
   u32 k = keccakf_rotc[s];      \
   bc0 = st[j];                  \
-  st[j] = rotl64_S (t, k);      \
+  st[j] = hc_rotl64_S (t, k);      \
   t = bc0;                      \
 }
 
@@ -99,11 +118,11 @@ DECLSPEC void keccak_transform_S (u64 *st)
 
     u64 t;
 
-    t = bc4 ^ rotl64_S (bc1, 1); Theta2 (0);
-    t = bc0 ^ rotl64_S (bc2, 1); Theta2 (1);
-    t = bc1 ^ rotl64_S (bc3, 1); Theta2 (2);
-    t = bc2 ^ rotl64_S (bc4, 1); Theta2 (3);
-    t = bc3 ^ rotl64_S (bc0, 1); Theta2 (4);
+    t = bc4 ^ hc_rotl64_S (bc1, 1); Theta2 (0);
+    t = bc0 ^ hc_rotl64_S (bc2, 1); Theta2 (1);
+    t = bc1 ^ hc_rotl64_S (bc3, 1); Theta2 (2);
+    t = bc2 ^ hc_rotl64_S (bc4, 1); Theta2 (3);
+    t = bc3 ^ hc_rotl64_S (bc0, 1); Theta2 (4);
 
     // Rho Pi
 
@@ -190,7 +209,7 @@ DECLSPEC void hmac_sha256_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *i
   sha256_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m16300_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_presale_t))
+KERNEL_FQ void m16300_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_presale_t))
 {
   /**
    * base
@@ -274,7 +293,7 @@ __kernel void m16300_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_p
   }
 }
 
-__kernel void m16300_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_presale_t))
+KERNEL_FQ void m16300_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_presale_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -380,7 +399,7 @@ __kernel void m16300_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_p
   }
 }
 
-__kernel void m16300_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_presale_t))
+KERNEL_FQ void m16300_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_presale_t))
 {
   /**
    * base
@@ -396,17 +415,17 @@ __kernel void m16300_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_p
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -423,21 +442,21 @@ __kernel void m16300_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_p
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -466,7 +485,7 @@ __kernel void m16300_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_p
 
   u32 ks[KEYLEN];
 
-  AES128_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4);
+  AES128_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_td0, s_td1, s_td2, s_td3);
 
   u32 iv[4];
 
@@ -505,10 +524,10 @@ __kernel void m16300_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_p
     c ^= out[2];
     d ^= out[3];
 
-    a = swap32_S (a);
-    b = swap32_S (b);
-    c = swap32_S (c);
-    d = swap32_S (d);
+    a = hc_swap32_S (a);
+    b = hc_swap32_S (b);
+    c = hc_swap32_S (c);
+    d = hc_swap32_S (d);
 
     seed[seed_idx + 0] = hl32_to_64_S (b, a);
     seed[seed_idx + 1] = hl32_to_64_S (d, c);
@@ -753,5 +772,7 @@ __kernel void m16300_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha256_tmp_t, ethereum_p
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

@@ -5,18 +5,29 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha1.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
-__constant u32 lotus64_table[64] =
+typedef struct lotus8_tmp
+{
+  u32 ipad[5];
+  u32 opad[5];
+
+  u32 dgst[5];
+  u32 out[5];
+
+} lotus8_tmp_t;
+
+CONSTANT_VK u32a lotus64_table[64] =
 {
   '0', '1', '2', '3', '4', '5', '6', '7',
   '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
@@ -28,7 +39,7 @@ __constant u32 lotus64_table[64] =
   'u', 'v', 'w', 'x', 'y', 'z', '+', '/',
 };
 
-__constant u32 lotus_magic_table[256] =
+CONSTANT_VK u32a lotus_magic_table[256] =
 {
   0xbd, 0x56, 0xea, 0xf2, 0xa2, 0xf1, 0xac, 0x2a,
   0xb0, 0x93, 0xd1, 0x9c, 0x1b, 0x33, 0xfd, 0xd0,
@@ -68,7 +79,7 @@ __constant u32 lotus_magic_table[256] =
 
 #define BOX1(S,i) (S)[(i)]
 
-DECLSPEC void lotus_mix (u32 *in, const __local u32 *s_lotus_magic_table)
+DECLSPEC void lotus_mix (u32 *in, LOCAL_AS const u32 *s_lotus_magic_table)
 {
   u8 p = 0;
 
@@ -91,7 +102,7 @@ DECLSPEC void lotus_mix (u32 *in, const __local u32 *s_lotus_magic_table)
   }
 }
 
-DECLSPEC void lotus_transform_password (const u32 *in, u32 *out, const __local u32 *s_lotus_magic_table)
+DECLSPEC void lotus_transform_password (const u32 *in, u32 *out, LOCAL_AS const u32 *s_lotus_magic_table)
 {
   u8 t = (u8) (out[3] >> 24);
 
@@ -188,7 +199,7 @@ DECLSPEC void pad (u32 *w, const u32 len)
   }
 }
 
-DECLSPEC void mdtransform_norecalc (u32 *state, const u32 *block, const __local u32 *s_lotus_magic_table)
+DECLSPEC void mdtransform_norecalc (u32 *state, const u32 *block, LOCAL_AS const u32 *s_lotus_magic_table)
 {
   u32 x[12];
 
@@ -213,14 +224,14 @@ DECLSPEC void mdtransform_norecalc (u32 *state, const u32 *block, const __local 
   state[3] = x[3];
 }
 
-DECLSPEC void mdtransform (u32 *state, u32 *checksum, const u32 *block, const __local u32 *s_lotus_magic_table)
+DECLSPEC void mdtransform (u32 *state, u32 *checksum, const u32 *block, LOCAL_AS const u32 *s_lotus_magic_table)
 {
   mdtransform_norecalc (state, block, s_lotus_magic_table);
 
   lotus_transform_password (block, checksum, s_lotus_magic_table);
 }
 
-DECLSPEC void domino_big_md (const u32 *saved_key, const u32 size, u32 *state, const __local u32 *s_lotus_magic_table)
+DECLSPEC void domino_big_md (const u32 *saved_key, const u32 size, u32 *state, LOCAL_AS const u32 *s_lotus_magic_table)
 {
   u32 checksum[4];
 
@@ -285,13 +296,6 @@ DECLSPEC void base64_encode (u8 *base64_hash, const u32 len, const u8 *base64_pl
 
 DECLSPEC void lotus6_base64_encode (u8 *base64_hash, const u32 salt0, const u32 salt1, const u32 a, const u32 b, const u32 c)
 {
-  const uchar4 salt0c = as_uchar4 (salt0);
-  const uchar4 salt1c = as_uchar4 (salt1);
-
-  const uchar4 ac = as_uchar4 (a);
-  const uchar4 bc = as_uchar4 (b);
-  const uchar4 cc = as_uchar4 (c);
-
   u8 tmp[24]; // size 22 (=pw_len) is needed but base64 needs size divisible by 4
 
   /*
@@ -300,23 +304,23 @@ DECLSPEC void lotus6_base64_encode (u8 *base64_hash, const u32 salt0, const u32 
 
   u8 base64_plain[16];
 
-  base64_plain[ 0] = salt0c.s0;
-  base64_plain[ 1] = salt0c.s1;
-  base64_plain[ 2] = salt0c.s2;
-  base64_plain[ 3] = salt0c.s3;
+  base64_plain[ 0] = unpack_v8a_from_v32_S (salt0);
+  base64_plain[ 1] = unpack_v8b_from_v32_S (salt0);
+  base64_plain[ 2] = unpack_v8c_from_v32_S (salt0);
+  base64_plain[ 3] = unpack_v8d_from_v32_S (salt0);
   base64_plain[ 3] -= -4; // dont ask!
-  base64_plain[ 4] = salt1c.s0;
-  base64_plain[ 5] = ac.s0;
-  base64_plain[ 6] = ac.s1;
-  base64_plain[ 7] = ac.s2;
-  base64_plain[ 8] = ac.s3;
-  base64_plain[ 9] = bc.s0;
-  base64_plain[10] = bc.s1;
-  base64_plain[11] = bc.s2;
-  base64_plain[12] = bc.s3;
-  base64_plain[13] = cc.s0;
-  base64_plain[14] = cc.s1;
-  base64_plain[15] = cc.s2;
+  base64_plain[ 4] = unpack_v8a_from_v32_S (salt1);
+  base64_plain[ 5] = unpack_v8a_from_v32_S (a);
+  base64_plain[ 6] = unpack_v8b_from_v32_S (a);
+  base64_plain[ 7] = unpack_v8c_from_v32_S (a);
+  base64_plain[ 8] = unpack_v8d_from_v32_S (a);
+  base64_plain[ 9] = unpack_v8a_from_v32_S (b);
+  base64_plain[10] = unpack_v8b_from_v32_S (b);
+  base64_plain[11] = unpack_v8c_from_v32_S (b);
+  base64_plain[12] = unpack_v8d_from_v32_S (b);
+  base64_plain[13] = unpack_v8a_from_v32_S (c);
+  base64_plain[14] = unpack_v8b_from_v32_S (c);
+  base64_plain[15] = unpack_v8c_from_v32_S (c);
 
   /*
    * base64 encode the $salt.$digest string
@@ -384,7 +388,7 @@ DECLSPEC void hmac_sha1_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipa
   sha1_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m09100_init (KERN_ATTR_TMPS (lotus8_tmp_t))
+KERNEL_FQ void m09100_init (KERN_ATTR_TMPS (lotus8_tmp_t))
 {
   /**
    * base
@@ -398,14 +402,14 @@ __kernel void m09100_init (KERN_ATTR_TMPS (lotus8_tmp_t))
    * sbox
    */
 
-  __local u32 s_lotus_magic_table[256];
+  LOCAL_VK u32 s_lotus_magic_table[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_lotus_magic_table[i] = lotus_magic_table[i];
   }
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -416,7 +420,7 @@ __kernel void m09100_init (KERN_ATTR_TMPS (lotus8_tmp_t))
                  | ((i1 < 10) ? '0' + i1 : 'A' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -650,7 +654,7 @@ __kernel void m09100_init (KERN_ATTR_TMPS (lotus8_tmp_t))
   }
 }
 
-__kernel void m09100_loop (KERN_ATTR_TMPS (lotus8_tmp_t))
+KERNEL_FQ void m09100_loop (KERN_ATTR_TMPS (lotus8_tmp_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -735,7 +739,7 @@ __kernel void m09100_loop (KERN_ATTR_TMPS (lotus8_tmp_t))
   }
 }
 
-__kernel void m09100_comp (KERN_ATTR_TMPS (lotus8_tmp_t))
+KERNEL_FQ void m09100_comp (KERN_ATTR_TMPS (lotus8_tmp_t))
 {
   /**
    * base
@@ -758,5 +762,7 @@ __kernel void m09100_comp (KERN_ATTR_TMPS (lotus8_tmp_t))
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

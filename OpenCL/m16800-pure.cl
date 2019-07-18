@@ -5,16 +5,45 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha1.cl"
+#else
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.h"
+#include "inc_common.h"
+#include "inc_simd.h"
+#include "inc_hash_sha1.h"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
+
+typedef struct wpa_pbkdf2_tmp
+{
+  u32 ipad[5];
+  u32 opad[5];
+
+  u32 dgst[10];
+  u32 out[10];
+
+} wpa_pbkdf2_tmp_t;
+
+typedef struct wpa_pmkid
+{
+  u32  pmkid[4];
+  u32  pmkid_data[16];
+  u8   orig_mac_ap[6];
+  u8   orig_mac_sta[6];
+  u8   essid_len;
+  u32  essid_buf[16];
+
+} wpa_pmkid_t;
 
 DECLSPEC void hmac_sha1_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, u32x *opad, u32x *digest)
 {
@@ -52,7 +81,7 @@ DECLSPEC void hmac_sha1_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipa
   sha1_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m16800_init (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
+KERNEL_FQ void m16800_init (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
 {
   /**
    * base
@@ -124,7 +153,7 @@ __kernel void m16800_init (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
   }
 }
 
-__kernel void m16800_loop (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
+KERNEL_FQ void m16800_loop (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -209,15 +238,14 @@ __kernel void m16800_loop (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
   }
 }
 
-__kernel void m16800_comp (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
+KERNEL_FQ void m16800_comp (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
 {
   // not in use here, special case...
 }
 
-__kernel void m16800_aux1 (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
+KERNEL_FQ void m16800_aux1 (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
 {
   const u64 gid = get_global_id (0);
-  const u64 lid = get_local_id (0);
 
   if (gid >= gid_max) return;
 
@@ -244,7 +272,7 @@ __kernel void m16800_aux1 (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
 
   const u32 digest_cur = digests_offset + digest_pos;
 
-  __global const wpa_pmkid_t *wpa_pmkid = &esalt_bufs[digest_cur];
+  GLOBAL_AS const wpa_pmkid_t *wpa_pmkid = &esalt_bufs[digest_cur];
 
   sha1_hmac_ctx_t sha1_hmac_ctx;
 
@@ -259,7 +287,23 @@ __kernel void m16800_aux1 (KERN_ATTR_TMPS_ESALT (wpa_pbkdf2_tmp_t, wpa_pmkid_t))
   const u32 r2 = sha1_hmac_ctx.opad.h[2];
   const u32 r3 = sha1_hmac_ctx.opad.h[3];
 
-  #define il_pos 0
+  #ifdef KERNEL_STATIC
 
+  #define il_pos 0
   #include COMPARE_M
+
+  #else
+
+  if ((hc_swap32_S (r0) == wpa_pmkid->pmkid[0])
+   && (hc_swap32_S (r1) == wpa_pmkid->pmkid[1])
+   && (hc_swap32_S (r2) == wpa_pmkid->pmkid[2])
+   && (hc_swap32_S (r3) == wpa_pmkid->pmkid[3]))
+  {
+    if (atomic_inc (&hashes_shown[digest_cur]) == 0)
+    {
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, digest_pos, digest_cur, gid, 0, 0, 0);
+    }
+  }
+
+  #endif
 }

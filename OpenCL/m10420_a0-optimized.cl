@@ -5,17 +5,18 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
 #include "inc_hash_md5.cl"
+#endif
 
-__constant u32a padding[8] =
+CONSTANT_VK u32a padding[8] =
 {
   0x5e4ebf28,
   0x418a754e,
@@ -27,7 +28,28 @@ __constant u32a padding[8] =
   0x7a695364
 };
 
-__kernel void m10420_m04 (KERN_ATTR_RULES_ESALT (pdf_t))
+typedef struct pdf
+{
+  int  V;
+  int  R;
+  int  P;
+
+  int  enc_md;
+
+  u32  id_buf[8];
+  u32  u_buf[32];
+  u32  o_buf[32];
+
+  int  id_len;
+  int  o_len;
+  int  u_len;
+
+  u32  rc4key[2];
+  u32  rc4data[2];
+
+} pdf_t;
+
+KERNEL_FQ void m10420_m04 (KERN_ATTR_RULES_ESALT (pdf_t))
 {
   /**
    * modifier
@@ -92,7 +114,7 @@ __kernel void m10420_m04 (KERN_ATTR_RULES_ESALT (pdf_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     /**
      * pdf
@@ -180,15 +202,15 @@ __kernel void m10420_m04 (KERN_ATTR_RULES_ESALT (pdf_t))
   }
 }
 
-__kernel void m10420_m08 (KERN_ATTR_RULES_ESALT (pdf_t))
+KERNEL_FQ void m10420_m08 (KERN_ATTR_RULES_ESALT (pdf_t))
 {
 }
 
-__kernel void m10420_m16 (KERN_ATTR_RULES_ESALT (pdf_t))
+KERNEL_FQ void m10420_m16 (KERN_ATTR_RULES_ESALT (pdf_t))
 {
 }
 
-__kernel void m10420_s04 (KERN_ATTR_RULES_ESALT (pdf_t))
+KERNEL_FQ void m10420_s04 (KERN_ATTR_RULES_ESALT (pdf_t))
 {
   /**
    * modifier
@@ -265,7 +287,7 @@ __kernel void m10420_s04 (KERN_ATTR_RULES_ESALT (pdf_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     /**
      * pdf
@@ -353,10 +375,10 @@ __kernel void m10420_s04 (KERN_ATTR_RULES_ESALT (pdf_t))
   }
 }
 
-__kernel void m10420_s08 (KERN_ATTR_RULES_ESALT (pdf_t))
+KERNEL_FQ void m10420_s08 (KERN_ATTR_RULES_ESALT (pdf_t))
 {
 }
 
-__kernel void m10420_s16 (KERN_ATTR_RULES_ESALT (pdf_t))
+KERNEL_FQ void m10420_s16 (KERN_ATTR_RULES_ESALT (pdf_t))
 {
 }

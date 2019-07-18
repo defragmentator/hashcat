@@ -5,15 +5,25 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha256.cl"
+#endif
 
-__kernel void m16511_mxx (KERN_ATTR_VECTOR_ESALT (jwt_t))
+typedef struct jwt
+{
+  u32 salt_buf[1024];
+  u32 salt_len;
+
+  u32 signature_len;
+
+} jwt_t;
+
+KERNEL_FQ void m16511_mxx (KERN_ATTR_VECTOR_ESALT (jwt_t))
 {
   /**
    * modifier
@@ -32,7 +42,7 @@ __kernel void m16511_mxx (KERN_ATTR_VECTOR_ESALT (jwt_t))
 
   u32x w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
@@ -68,7 +78,7 @@ __kernel void m16511_mxx (KERN_ATTR_VECTOR_ESALT (jwt_t))
   }
 }
 
-__kernel void m16511_sxx (KERN_ATTR_VECTOR_ESALT (jwt_t))
+KERNEL_FQ void m16511_sxx (KERN_ATTR_VECTOR_ESALT (jwt_t))
 {
   /**
    * modifier
@@ -99,7 +109,7 @@ __kernel void m16511_sxx (KERN_ATTR_VECTOR_ESALT (jwt_t))
 
   u32x w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }

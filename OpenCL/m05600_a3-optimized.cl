@@ -5,14 +5,27 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_md4.cl"
 #include "inc_hash_md5.cl"
+#endif
+
+typedef struct netntlm
+{
+  u32 user_len;
+  u32 domain_len;
+  u32 srvchall_len;
+  u32 clichall_len;
+
+  u32 userdomain_buf[64];
+  u32 chall_buf[256];
+
+} netntlm_t;
 
 DECLSPEC void hmac_md5_pad (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, u32x *opad)
 {
@@ -99,7 +112,7 @@ DECLSPEC void hmac_md5_run (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, 
   md5_transform_vector (w0, w1, w2, w3, digest);
 }
 
-DECLSPEC void m05600m (u32 *w0, u32 *w1, u32 *w2, u32 *w3, const u32 pw_len, KERN_ATTR_ESALT (netntlm_t), __local u32 *s_userdomain_buf, __local u32 *s_chall_buf)
+DECLSPEC void m05600m (u32 *w0, u32 *w1, u32 *w2, u32 *w3, const u32 pw_len, KERN_ATTR_ESALT (netntlm_t), LOCAL_AS u32 *s_userdomain_buf, LOCAL_AS u32 *s_chall_buf)
 {
   /**
    * modifier
@@ -305,7 +318,7 @@ DECLSPEC void m05600m (u32 *w0, u32 *w1, u32 *w2, u32 *w3, const u32 pw_len, KER
   }
 }
 
-DECLSPEC void m05600s (u32 *w0, u32 *w1, u32 *w2, u32 *w3, const u32 pw_len, KERN_ATTR_ESALT (netntlm_t), __local u32 *s_userdomain_buf, __local u32 *s_chall_buf)
+DECLSPEC void m05600s (u32 *w0, u32 *w1, u32 *w2, u32 *w3, const u32 pw_len, KERN_ATTR_ESALT (netntlm_t), LOCAL_AS u32 *s_userdomain_buf, LOCAL_AS u32 *s_chall_buf)
 {
   /**
    * modifier
@@ -523,7 +536,7 @@ DECLSPEC void m05600s (u32 *w0, u32 *w1, u32 *w2, u32 *w3, const u32 pw_len, KER
   }
 }
 
-__kernel void m05600_m04 (KERN_ATTR_ESALT (netntlm_t))
+KERNEL_FQ void m05600_m04 (KERN_ATTR_ESALT (netntlm_t))
 {
   /**
    * modifier
@@ -537,21 +550,21 @@ __kernel void m05600_m04 (KERN_ATTR_ESALT (netntlm_t))
    * salt
    */
 
-  __local u32 s_userdomain_buf[64];
+  LOCAL_VK u32 s_userdomain_buf[64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
     s_userdomain_buf[i] = esalt_bufs[digests_offset].userdomain_buf[i];
   }
 
-  __local u32 s_chall_buf[256];
+  LOCAL_VK u32 s_chall_buf[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_chall_buf[i] = esalt_bufs[digests_offset].chall_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -596,7 +609,7 @@ __kernel void m05600_m04 (KERN_ATTR_ESALT (netntlm_t))
   m05600m (w0, w1, w2, w3, pw_len, pws, rules_buf, combs_buf, bfs_buf, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max, s_userdomain_buf, s_chall_buf);
 }
 
-__kernel void m05600_m08 (KERN_ATTR_ESALT (netntlm_t))
+KERNEL_FQ void m05600_m08 (KERN_ATTR_ESALT (netntlm_t))
 {
   /**
    * modifier
@@ -610,21 +623,21 @@ __kernel void m05600_m08 (KERN_ATTR_ESALT (netntlm_t))
    * salt
    */
 
-  __local u32 s_userdomain_buf[64];
+  LOCAL_VK u32 s_userdomain_buf[64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
     s_userdomain_buf[i] = esalt_bufs[digests_offset].userdomain_buf[i];
   }
 
-  __local u32 s_chall_buf[256];
+  LOCAL_VK u32 s_chall_buf[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_chall_buf[i] = esalt_bufs[digests_offset].chall_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -669,7 +682,7 @@ __kernel void m05600_m08 (KERN_ATTR_ESALT (netntlm_t))
   m05600m (w0, w1, w2, w3, pw_len, pws, rules_buf, combs_buf, bfs_buf, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max, s_userdomain_buf, s_chall_buf);
 }
 
-__kernel void m05600_m16 (KERN_ATTR_ESALT (netntlm_t))
+KERNEL_FQ void m05600_m16 (KERN_ATTR_ESALT (netntlm_t))
 {
   /**
    * modifier
@@ -683,21 +696,21 @@ __kernel void m05600_m16 (KERN_ATTR_ESALT (netntlm_t))
    * salt
    */
 
-  __local u32 s_userdomain_buf[64];
+  LOCAL_VK u32 s_userdomain_buf[64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
     s_userdomain_buf[i] = esalt_bufs[digests_offset].userdomain_buf[i];
   }
 
-  __local u32 s_chall_buf[256];
+  LOCAL_VK u32 s_chall_buf[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_chall_buf[i] = esalt_bufs[digests_offset].chall_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -742,7 +755,7 @@ __kernel void m05600_m16 (KERN_ATTR_ESALT (netntlm_t))
   m05600m (w0, w1, w2, w3, pw_len, pws, rules_buf, combs_buf, bfs_buf, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max, s_userdomain_buf, s_chall_buf);
 }
 
-__kernel void m05600_s04 (KERN_ATTR_ESALT (netntlm_t))
+KERNEL_FQ void m05600_s04 (KERN_ATTR_ESALT (netntlm_t))
 {
   /**
    * modifier
@@ -756,21 +769,21 @@ __kernel void m05600_s04 (KERN_ATTR_ESALT (netntlm_t))
    * salt
    */
 
-  __local u32 s_userdomain_buf[64];
+  LOCAL_VK u32 s_userdomain_buf[64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
     s_userdomain_buf[i] = esalt_bufs[digests_offset].userdomain_buf[i];
   }
 
-  __local u32 s_chall_buf[256];
+  LOCAL_VK u32 s_chall_buf[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_chall_buf[i] = esalt_bufs[digests_offset].chall_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -815,7 +828,7 @@ __kernel void m05600_s04 (KERN_ATTR_ESALT (netntlm_t))
   m05600s (w0, w1, w2, w3, pw_len, pws, rules_buf, combs_buf, bfs_buf, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max, s_userdomain_buf, s_chall_buf);
 }
 
-__kernel void m05600_s08 (KERN_ATTR_ESALT (netntlm_t))
+KERNEL_FQ void m05600_s08 (KERN_ATTR_ESALT (netntlm_t))
 {
   /**
    * modifier
@@ -829,21 +842,21 @@ __kernel void m05600_s08 (KERN_ATTR_ESALT (netntlm_t))
    * salt
    */
 
-  __local u32 s_userdomain_buf[64];
+  LOCAL_VK u32 s_userdomain_buf[64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
     s_userdomain_buf[i] = esalt_bufs[digests_offset].userdomain_buf[i];
   }
 
-  __local u32 s_chall_buf[256];
+  LOCAL_VK u32 s_chall_buf[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_chall_buf[i] = esalt_bufs[digests_offset].chall_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -888,7 +901,7 @@ __kernel void m05600_s08 (KERN_ATTR_ESALT (netntlm_t))
   m05600s (w0, w1, w2, w3, pw_len, pws, rules_buf, combs_buf, bfs_buf, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max, s_userdomain_buf, s_chall_buf);
 }
 
-__kernel void m05600_s16 (KERN_ATTR_ESALT (netntlm_t))
+KERNEL_FQ void m05600_s16 (KERN_ATTR_ESALT (netntlm_t))
 {
   /**
    * modifier
@@ -902,21 +915,21 @@ __kernel void m05600_s16 (KERN_ATTR_ESALT (netntlm_t))
    * salt
    */
 
-  __local u32 s_userdomain_buf[64];
+  LOCAL_VK u32 s_userdomain_buf[64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
     s_userdomain_buf[i] = esalt_bufs[digests_offset].userdomain_buf[i];
   }
 
-  __local u32 s_chall_buf[256];
+  LOCAL_VK u32 s_chall_buf[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_chall_buf[i] = esalt_bufs[digests_offset].chall_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 

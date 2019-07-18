@@ -7,7 +7,6 @@
 #include "types.h"
 #include "memory.h"
 #include "event.h"
-#include "user_options.h"
 #include "shared.h"
 #include "pidfile.h"
 
@@ -17,15 +16,15 @@ static int check_running_process (hashcat_ctx_t *hashcat_ctx)
 
   char *pidfile_filename = pidfile_ctx->filename;
 
-  FILE *fp = fopen (pidfile_filename, "rb");
+  HCFILE fp;
 
-  if (fp == NULL) return 0;
+  if (hc_fopen (&fp, pidfile_filename, "rb") == false) return 0;
 
   pidfile_data_t *pd = (pidfile_data_t *) hcmalloc (sizeof (pidfile_data_t));
 
-  const size_t nread = hc_fread (pd, sizeof (pidfile_data_t), 1, fp);
+  const size_t nread = hc_fread (pd, sizeof (pidfile_data_t), 1, &fp);
 
-  fclose (fp);
+  hc_fclose (&fp);
 
   if (nread != 1)
   {
@@ -73,17 +72,46 @@ static int check_running_process (hashcat_ctx_t *hashcat_ctx)
 
     char *pidbin;
 
-    hc_asprintf (&pidbin, "/proc/%u/cmdline", pd->pid);
+    hc_asprintf (&pidbin, "/proc/%u/exe", pd->pid);
 
     if (hc_path_exist (pidbin) == true)
     {
-      event_log_error (hashcat_ctx, "Already an instance running on pid %u", pd->pid);
+      // pid info
+
+      char *pidexe = (char *) hcmalloc (HCBUFSIZ_TINY);
+
+      const ssize_t pidexe_len = readlink (pidbin, pidexe, HCBUFSIZ_TINY - 1);
+
+      pidexe[pidexe_len] = 0;
+
+      // self info
+
+      char *selfexe = (char *) hcmalloc (HCBUFSIZ_TINY);
+
+      const ssize_t selfexe_len = readlink ("/proc/self/exe", selfexe, HCBUFSIZ_TINY - 1);
+
+      selfexe[selfexe_len] = 0;
+
+      // compare
+
+      const int r = strncmp (pidexe, selfexe, selfexe_len);
+
+      if (r == 0)
+      {
+        event_log_error (hashcat_ctx, "Already an instance '%s' running on pid %u", pidexe, pd->pid);
+      }
+
+      hcfree (selfexe);
+
+      hcfree (pidexe);
 
       hcfree (pd);
 
       hcfree (pidbin);
 
-      return -1;
+      if (r == 0) return -1;
+
+      return 0;
     }
 
     hcfree (pidbin);
@@ -125,20 +153,20 @@ static int write_pidfile (hashcat_ctx_t *hashcat_ctx)
 
   char *pidfile_filename = pidfile_ctx->filename;
 
-  FILE *fp = fopen (pidfile_filename, "wb");
+  HCFILE fp;
 
-  if (fp == NULL)
+  if (hc_fopen (&fp, pidfile_filename, "wb") == false)
   {
     event_log_error (hashcat_ctx, "%s: %s", pidfile_filename, strerror (errno));
 
     return -1;
   }
 
-  hc_fwrite (pd, sizeof (pidfile_data_t), 1, fp);
+  hc_fwrite (pd, sizeof (pidfile_data_t), 1, &fp);
 
-  fflush (fp);
+  hc_fflush (&fp);
 
-  fclose (fp);
+  hc_fclose (&fp);
 
   return 0;
 }

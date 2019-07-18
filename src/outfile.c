@@ -5,29 +5,25 @@
 
 #include "common.h"
 #include "types.h"
-#include "memory.h"
 #include "event.h"
 #include "convert.h"
-#include "interface.h"
-#include "hashes.h"
 #include "mpsp.h"
 #include "rp.h"
-#include "rp_kernel_on_cpu.h"
-#include "rp_kernel_on_cpu_optimized.h"
-#include "opencl.h"
+#include "emu_inc_rp.h"
+#include "emu_inc_rp_optimized.h"
+#include "backend.h"
 #include "shared.h"
-#include "outfile.h"
 #include "locking.h"
+#include "outfile.h"
 
 int build_plain (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, plain_t *plain, u32 *plain_buf, int *out_len)
 {
-  const combinator_ctx_t     *combinator_ctx      = hashcat_ctx->combinator_ctx;
-  const hashconfig_t         *hashconfig          = hashcat_ctx->hashconfig;
-  const hashes_t             *hashes              = hashcat_ctx->hashes;
-  const mask_ctx_t           *mask_ctx            = hashcat_ctx->mask_ctx;
-  const straight_ctx_t       *straight_ctx        = hashcat_ctx->straight_ctx;
-  const user_options_t       *user_options        = hashcat_ctx->user_options;
-  const user_options_extra_t *user_options_extra  = hashcat_ctx->user_options_extra;
+  const combinator_ctx_t *combinator_ctx = hashcat_ctx->combinator_ctx;
+  const hashconfig_t     *hashconfig     = hashcat_ctx->hashconfig;
+  const hashes_t         *hashes         = hashcat_ctx->hashes;
+  const mask_ctx_t       *mask_ctx       = hashcat_ctx->mask_ctx;
+  const straight_ctx_t   *straight_ctx   = hashcat_ctx->straight_ctx;
+  const user_options_t   *user_options   = hashcat_ctx->user_options;
 
   const u64 gidvid = plain->gidvid;
   const u32 il_pos = plain->il_pos;
@@ -373,7 +369,7 @@ int outfile_init (hashcat_ctx_t *hashcat_ctx)
   outfile_ctx_t  *outfile_ctx  = hashcat_ctx->outfile_ctx;
   user_options_t *user_options = hashcat_ctx->user_options;
 
-  outfile_ctx->fp               = NULL;
+  outfile_ctx->fp.pfp           = NULL;
   outfile_ctx->filename         = user_options->outfile;
   outfile_ctx->outfile_format   = user_options->outfile_format;
   outfile_ctx->outfile_autohex  = user_options->outfile_autohex;
@@ -394,25 +390,21 @@ int outfile_write_open (hashcat_ctx_t *hashcat_ctx)
 
   if (outfile_ctx->filename == NULL) return 0;
 
-  FILE *fp = fopen (outfile_ctx->filename, "ab");
-
-  if (fp == NULL)
+  if (hc_fopen (&outfile_ctx->fp, outfile_ctx->filename, "ab") == false)
   {
     event_log_error (hashcat_ctx, "%s: %s", outfile_ctx->filename, strerror (errno));
 
     return -1;
   }
 
-  if (lock_file (fp) == -1)
+  if (hc_lockfile (&outfile_ctx->fp) == -1)
   {
-    fclose (fp);
+    hc_fclose (&outfile_ctx->fp);
 
     event_log_error (hashcat_ctx, "%s: %s", outfile_ctx->filename, strerror (errno));
 
     return -1;
   }
-
-  outfile_ctx->fp = fp;
 
   return 0;
 }
@@ -421,16 +413,16 @@ void outfile_write_close (hashcat_ctx_t *hashcat_ctx)
 {
   outfile_ctx_t *outfile_ctx = hashcat_ctx->outfile_ctx;
 
-  if (outfile_ctx->fp == NULL) return;
+  if (outfile_ctx->fp.pfp == NULL) return;
 
-  fclose (outfile_ctx->fp);
+  hc_fclose (&outfile_ctx->fp);
 }
 
 int outfile_write (hashcat_ctx_t *hashcat_ctx, const char *out_buf, const int out_len, const unsigned char *plain_ptr, const u32 plain_len, const u64 crackpos, const unsigned char *username, const u32 user_len, char tmp_buf[HCBUFSIZ_LARGE])
 {
   const hashconfig_t   *hashconfig   = hashcat_ctx->hashconfig;
-  const outfile_ctx_t  *outfile_ctx  = hashcat_ctx->outfile_ctx;
   const user_options_t *user_options = hashcat_ctx->user_options;
+  outfile_ctx_t        *outfile_ctx  = hashcat_ctx->outfile_ctx;
 
   const u32 outfile_format = (hashconfig->opts_type & OPTS_TYPE_PT_ALWAYS_HEXIFY) ? 5 : outfile_ctx->outfile_format;
 
@@ -531,10 +523,10 @@ int outfile_write (hashcat_ctx_t *hashcat_ctx, const char *out_buf, const int ou
 
   tmp_buf[tmp_len] = 0;
 
-  if (outfile_ctx->fp != NULL)
+  if (outfile_ctx->fp.pfp != NULL)
   {
-    hc_fwrite (tmp_buf, tmp_len,      1, outfile_ctx->fp);
-    hc_fwrite (EOL,     strlen (EOL), 1, outfile_ctx->fp);
+    hc_fwrite (tmp_buf, tmp_len,      1, &outfile_ctx->fp);
+    hc_fwrite (EOL,     strlen (EOL), 1, &outfile_ctx->fp);
   }
 
   return tmp_len;

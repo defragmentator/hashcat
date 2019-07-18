@@ -5,11 +5,10 @@
 
 #include "common.h"
 #include "types.h"
-#include "bitops.h"
 #include "convert.h"
 #include "shared.h"
-#include "inc_hash_constants.h"
-#include "cpu_des.h"
+#include "memory.h"
+#include <errno.h>
 
 #if defined (__CYGWIN__)
 #include <sys/cygwin.h>
@@ -52,13 +51,12 @@ static const char *PA_033 = "Invalid hccapx message pair";
 static const char *PA_034 = "Token encoding exception";
 static const char *PA_035 = "Token length exception";
 static const char *PA_036 = "Insufficient entropy exception";
+static const char *PA_037 = "Hash contains unsupported compression type for current mode";
 static const char *PA_255 = "Unknown error";
 
 static const char *OPTI_STR_OPTIMIZED_KERNEL     = "Optimized-Kernel";
 static const char *OPTI_STR_ZERO_BYTE            = "Zero-Byte";
 static const char *OPTI_STR_PRECOMPUTE_INIT      = "Precompute-Init";
-static const char *OPTI_STR_PRECOMPUTE_MERKLE    = "Precompute-Merkle-Demgard";
-static const char *OPTI_STR_PRECOMPUTE_PERMUT    = "Precompute-Final-Permutation";
 static const char *OPTI_STR_MEET_IN_MIDDLE       = "Meet-In-The-Middle";
 static const char *OPTI_STR_EARLY_SKIP           = "Early-Skip";
 static const char *OPTI_STR_NOT_SALTED           = "Not-Salted";
@@ -232,13 +230,13 @@ void naive_escape (char *s, size_t s_max, const char key_char, const char escape
   strncpy (s, s_escaped, s_max - 1);
 }
 
-void hc_asprintf (char **strp, const char *fmt, ...)
+int hc_asprintf (char **strp, const char *fmt, ...)
 {
   va_list args;
   va_start (args, fmt);
-  int rc __attribute__((unused));
-  rc = vasprintf (strp, fmt, args);
+  int rc = vasprintf (strp, fmt, args);
   va_end (args);
+  return rc;
 }
 
 #if defined (_WIN)
@@ -352,13 +350,13 @@ bool hc_path_has_bom (const char *path)
 {
   u8 buf[8] = { 0 };
 
-  FILE *fp = fopen (path, "rb");
+  HCFILE fp;
 
-  if (fp == NULL) return false;
+  if (hc_fopen (&fp, path, "rb") == false) return false;
 
-  const size_t nread = fread (buf, 1, sizeof (buf), fp);
+  const size_t nread = hc_fread (buf, 1, sizeof (buf), &fp);
 
-  fclose (fp);
+  hc_fclose (&fp);
 
   if (nread < 1) return false;
 
@@ -471,7 +469,7 @@ bool hc_string_is_digit (const char *s)
   return true;
 }
 
-void setup_environment_variables ()
+void setup_environment_variables (const folder_config_t *folder_config)
 {
   char *compute = getenv ("COMPUTE");
 
@@ -491,6 +489,7 @@ void setup_environment_variables ()
       putenv ((char *) "DISPLAY=:0");
   }
 
+  /*
   if (getenv ("OCL_CODE_CACHE_ENABLE") == NULL)
     putenv ((char *) "OCL_CODE_CACHE_ENABLE=0");
 
@@ -499,6 +498,18 @@ void setup_environment_variables ()
 
   if (getenv ("POCL_KERNEL_CACHE") == NULL)
     putenv ((char *) "POCL_KERNEL_CACHE=0");
+  */
+
+  if (getenv ("TMPDIR") == NULL)
+  {
+    char *tmpdir = NULL;
+
+    hc_asprintf (&tmpdir, "TMPDIR=%s", folder_config->profile_dir);
+
+    putenv (tmpdir);
+
+    // we can't free tmpdir at this point!
+  }
 
   if (getenv ("CL_CONFIG_USE_VECTORIZER") == NULL)
     putenv ((char *) "CL_CONFIG_USE_VECTORIZER=False");
@@ -592,16 +603,370 @@ void hc_string_trim_trailing (char *s)
   s[new_len] = 0;
 }
 
-size_t hc_fread (void *ptr, size_t size, size_t nmemb, FILE *stream)
+#if defined (__CYGWIN__)
+// workaround for zlib with cygwin build
+int _wopen(const char *path, int oflag, ...)
 {
-  return fread (ptr, size, nmemb, stream);
+  va_list ap;
+  va_start (ap, oflag);
+  int r = open (path, oflag, ap);
+  va_end (ap);
+  return r;
+}
+#endif
+
+bool hc_fopen (HCFILE *fp, const char *path, char *mode)
+{
+  if (path == NULL || mode == NULL) return false;
+
+  int oflag = -1;
+
+  int fmode = S_IRUSR|S_IWUSR;
+
+  if (strncmp (mode, "a", 1) == 0 || strncmp (mode, "ab", 2) == 0)
+  {
+    oflag = O_WRONLY | O_CREAT | O_APPEND;
+
+    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    if (strncmp (mode, "ab", 2) == 0) oflag |= O_BINARY;
+    #endif
+  }
+  else if (strncmp (mode, "r", 1) == 0 || strncmp (mode, "rb", 2) == 0)
+  {
+    oflag = O_RDONLY;
+    fmode = -1;
+
+    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    if (strncmp (mode, "rb", 2) == 0) oflag |= O_BINARY;
+    #endif
+  }
+  else if (strncmp (mode, "w", 1) == 0 || strncmp (mode, "wb", 2) == 0)
+  {
+    oflag = O_WRONLY | O_CREAT | O_TRUNC;
+
+    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    if (strncmp (mode, "wb", 2) == 0) oflag |= O_BINARY;
+    #endif
+  }
+  else
+  {
+    // ADD more strncmp to handle more "mode"
+    return false;
+  }
+
+  fp->pfp = NULL;
+  fp->is_gzip = false;
+
+  unsigned char check[3] = { 0 };
+
+  int fd_tmp = open (path, O_RDONLY);
+
+  if (fd_tmp != -1)
+  {
+    lseek (fd_tmp, 0, SEEK_SET);
+
+    if (read (fd_tmp, check, sizeof(check)) > 0)
+    {
+      if (check[0] == 0x1f && check[1] == 0x8b && check[2] == 0x08) fp->is_gzip = true;
+    }
+
+    close (fd_tmp);
+  }
+
+  if (fmode == -1)
+  {
+    fp->fd = open (path, oflag);
+  }
+  else
+  {
+    fp->fd = open (path, oflag, fmode);
+  }
+
+  if (fp->fd == -1) return false;
+
+  if (fp->is_gzip)
+  {
+    if ((fp->gfp = gzdopen (fp->fd, mode)) == NULL) return false;
+  }
+  else
+  {
+    if ((fp->pfp = fdopen (fp->fd, mode)) == NULL)  return false;
+  }
+
+  fp->path = path;
+  fp->mode = mode;
+
+  return true;
 }
 
-void hc_fwrite (const void *ptr, size_t size, size_t nmemb, FILE *stream)
+size_t hc_fread (void *ptr, size_t size, size_t nmemb, HCFILE *fp)
 {
-  size_t rc = fwrite (ptr, size, nmemb, stream);
+  size_t n = -1;
 
-  if (rc == 0) rc = 0;
+  if (fp == NULL) return n;
+
+  if (fp->is_gzip)
+  {
+    n = gzfread (ptr, size, nmemb, fp->gfp);
+  }
+  else
+  {
+    n = fread (ptr, size, nmemb, fp->pfp);
+  }
+
+  return n;
+}
+
+size_t hc_fwrite (void *ptr, size_t size, size_t nmemb, HCFILE *fp)
+{
+  size_t n = -1;
+
+  if (fp == NULL) return n;
+
+  if (fp->is_gzip)
+  {
+    n = gzfwrite (ptr, size, nmemb, fp->gfp);
+  }
+  else
+  {
+    n = fwrite (ptr, size, nmemb, fp->pfp);
+  }
+
+  if (n != nmemb) return -1;
+
+  return n;
+}
+
+int hc_fseek (HCFILE *fp, off_t offset, int whence)
+{
+  int r = -1;
+
+  if (fp == NULL) return r;
+
+  if (fp->is_gzip)
+  {
+    r = gzseek (fp->gfp, (z_off_t) offset, whence);
+  }
+  else
+  {
+    r = fseeko (fp->pfp, offset, whence);
+  }
+
+  return r;
+}
+
+void hc_rewind (HCFILE *fp)
+{
+  if (fp == NULL) return;
+
+  if (fp->is_gzip)
+  {
+    gzrewind (fp->gfp);
+  }
+  else
+  {
+    rewind (fp->pfp);
+  }
+}
+
+off_t hc_ftell (HCFILE *fp)
+{
+  off_t n = 0;
+
+  if (fp == NULL) return -1;
+
+  if (fp->is_gzip)
+  {
+    n = (off_t) gztell (fp->gfp);
+  }
+  else
+  {
+    n = ftello (fp->pfp);
+  }
+
+  return n;
+}
+
+int hc_fputc (int c, HCFILE *fp)
+{
+  int r = -1;
+
+  if (fp == NULL) return r;
+
+  if (fp->is_gzip)
+  {
+    r = gzputc (fp->gfp, c);
+  }
+  else
+  {
+    r = fputc (c, fp->pfp);
+  }
+
+  return r;
+}
+
+int hc_fgetc (HCFILE *fp)
+{
+  int r = -1;
+
+  if (fp == NULL) return r;
+
+  if (fp->is_gzip)
+  {
+    r = gzgetc (fp->gfp);
+  }
+  else
+  {
+    r = fgetc (fp->pfp);
+  }
+
+  return r;
+}
+
+char *hc_fgets (char *buf, int len, HCFILE *fp)
+{
+  char *r = NULL;
+
+  if (fp == NULL) return r;
+
+  if (fp->is_gzip)
+  {
+    r = gzgets (fp->gfp, buf, len);
+  }
+  else
+  {
+    r = fgets (buf, len, fp->pfp);
+  }
+
+  return r;
+}
+
+int hc_vfprintf (HCFILE *fp, const char *format, va_list ap)
+{
+  int r = -1;
+
+  if (fp == NULL) return r;
+
+  if (fp->is_gzip)
+  {
+    r = gzvprintf (fp->gfp, format, ap);
+  }
+  else
+  {
+    r = vfprintf (fp->pfp, format, ap);
+  }
+
+  return r;
+}
+
+int hc_fprintf (HCFILE *fp, const char *format, ...)
+{
+  int r = -1;
+
+  if (fp == NULL) return r;
+
+  va_list ap;
+
+  va_start (ap, format);
+
+  if (fp->is_gzip)
+  {
+    r = gzvprintf (fp->gfp, format, ap);
+  }
+  else
+  {
+    r = vfprintf (fp->pfp, format, ap);
+  }
+
+  va_end (ap);
+
+  return r;
+}
+
+int hc_fscanf (HCFILE *fp, const char *format, void *ptr)
+{
+  if (fp == NULL) return -1;
+
+  char *buf = (char *) hcmalloc (HCBUFSIZ_TINY);
+
+  if (buf == NULL) return -1;
+
+  char *b = hc_fgets (buf, HCBUFSIZ_TINY - 1, fp);
+
+  if (b == NULL)
+  {
+    hcfree (buf);
+
+    return -1;
+  }
+
+  sscanf (b, format, (void *) ptr);
+
+  hcfree (buf);
+
+  return 1;
+}
+
+int hc_fileno (HCFILE *fp)
+{
+  if (fp == NULL) return 1;
+
+  return fp->fd;
+}
+
+int hc_feof (HCFILE *fp)
+{
+  int r = -1;
+
+  if (fp == NULL) return r;
+
+  if (fp->is_gzip)
+  {
+    r = gzeof (fp->gfp);
+  }
+  else
+  {
+    r = feof (fp->pfp);
+  }
+
+  return r;
+}
+
+void hc_fflush (HCFILE *fp)
+{
+  if (fp == NULL) return;
+
+  if (fp->is_gzip)
+  {
+    gzflush (fp->gfp, Z_SYNC_FLUSH);
+  }
+  else
+  {
+    fflush (fp->pfp);
+  }
+}
+
+void hc_fclose (HCFILE *fp)
+{
+  if (fp == NULL) return;
+
+  if (fp->is_gzip)
+  {
+    gzclose (fp->gfp);
+  }
+  else
+  {
+    fclose (fp->pfp);
+  }
+
+  close (fp->fd);
+
+  fp->fd = -1;
+  fp->pfp = NULL;
+  fp->is_gzip = false;
+
+  fp->path = NULL;
+  fp->mode = NULL;
 }
 
 bool hc_same_files (char *file1, char *file2)
@@ -613,36 +978,32 @@ bool hc_same_files (char *file1, char *file2)
 
     int do_check = 0;
 
-    FILE *fp;
+    HCFILE fp;
 
-    fp = fopen (file1, "r");
-
-    if (fp)
+    if (hc_fopen (&fp, file1, "r") == true)
     {
-      if (fstat (fileno (fp), &tmpstat_file1))
+      if (fstat (hc_fileno (&fp), &tmpstat_file1))
       {
-        fclose (fp);
+        hc_fclose (&fp);
 
         return false;
       }
 
-      fclose (fp);
+      hc_fclose (&fp);
 
       do_check++;
     }
 
-    fp = fopen (file2, "r");
-
-    if (fp)
+    if (hc_fopen (&fp, file2, "r") == true)
     {
-      if (fstat (fileno (fp), &tmpstat_file2))
+      if (fstat (hc_fileno (&fp), &tmpstat_file2))
       {
-        fclose (fp);
+        hc_fclose (&fp);
 
         return false;
       }
 
-      fclose (fp);
+      hc_fclose (&fp);
 
       do_check++;
     }
@@ -978,6 +1339,7 @@ const char *strparser (const u32 parser_status)
     case PARSER_TOKEN_ENCODING:       return PA_034;
     case PARSER_TOKEN_LENGTH:         return PA_035;
     case PARSER_INSUFFICIENT_ENTROPY: return PA_036;
+    case PARSER_PKZIP_CT_UNMATCHED:   return PA_037;
   }
 
   return PA_255;
@@ -1232,8 +1594,6 @@ int generic_salt_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, const u8 *
   {
     for (int i = 0, j = 0; i < in_len; i += 1, j += 2)
     {
-      const u8 p = in_buf[i];
-
       u8_to_hex (in_buf[i], tmp_u8 + j);
     }
 

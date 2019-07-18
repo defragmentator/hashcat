@@ -5,13 +5,14 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_md5.cl"
+#endif
 
 DECLSPEC void cram_md5_transform_vector (const u32x *w0, const u32x *w1, const u32x *w2, const u32x *w3, u32x *digest)
 {
@@ -116,9 +117,9 @@ DECLSPEC void cram_md5_transform_vector (const u32x *w0, const u32x *w1, const u
 DECLSPEC void cram_md5_update_vector_64 (md5_ctx_vector_t *ctx, u32x *w0, u32x *w1, u32x *w2, u32x *w3, const int len)
 {
   #ifdef IS_AMD
-  const int pos = ctx->len & 63;
+  MAYBE_VOLATILE const int pos = ctx->len & 63;
   #else
-  const int pos = ctx->len & 63;
+  MAYBE_VOLATILE const int pos = ctx->len & 63;
   #endif
 
   ctx->len += len;
@@ -176,7 +177,7 @@ DECLSPEC void cram_md5_final_vector (md5_ctx_vector_t *ctx)
   cram_md5_transform_vector (ctx->w0, ctx->w1, ctx->w2, ctx->w3, ctx->h);
 }
 
-__kernel void m16400_mxx (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m16400_mxx (KERN_ATTR_VECTOR ())
 {
   /**
    * modifier
@@ -195,7 +196,7 @@ __kernel void m16400_mxx (KERN_ATTR_VECTOR ())
 
   u32x w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
@@ -231,7 +232,7 @@ __kernel void m16400_mxx (KERN_ATTR_VECTOR ())
   }
 }
 
-__kernel void m16400_sxx (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m16400_sxx (KERN_ATTR_VECTOR ())
 {
   /**
    * modifier
@@ -262,7 +263,7 @@ __kernel void m16400_sxx (KERN_ATTR_VECTOR ())
 
   u32x w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }

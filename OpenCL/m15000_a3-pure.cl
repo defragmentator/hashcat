@@ -5,15 +5,16 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha512.cl"
+#endif
 
-__kernel void m15000_mxx (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m15000_mxx (KERN_ATTR_VECTOR ())
 {
   /**
    * modifier
@@ -32,7 +33,7 @@ __kernel void m15000_mxx (KERN_ATTR_VECTOR ())
 
   u32x w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
@@ -41,9 +42,9 @@ __kernel void m15000_mxx (KERN_ATTR_VECTOR ())
 
   u32x s[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
   {
-    s[idx] = swap32_S (salt_bufs[salt_pos].salt_buf[idx]);
+    s[idx] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[idx]);
   }
 
   /**
@@ -79,7 +80,7 @@ __kernel void m15000_mxx (KERN_ATTR_VECTOR ())
   }
 }
 
-__kernel void m15000_sxx (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m15000_sxx (KERN_ATTR_VECTOR ())
 {
   /**
    * modifier
@@ -110,7 +111,7 @@ __kernel void m15000_sxx (KERN_ATTR_VECTOR ())
 
   u32x w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
@@ -119,9 +120,9 @@ __kernel void m15000_sxx (KERN_ATTR_VECTOR ())
 
   u32x s[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
   {
-    s[idx] = swap32_S (salt_bufs[salt_pos].salt_buf[idx]);
+    s[idx] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[idx]);
   }
 
   /**

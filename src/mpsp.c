@@ -11,8 +11,7 @@
 #include "logfile.h"
 #include "convert.h"
 #include "filehandling.h"
-#include "interface.h"
-#include "opencl.h"
+#include "backend.h"
 #include "shared.h"
 #include "ext_lzma.h"
 #include "mpsp.h"
@@ -583,9 +582,9 @@ static void mp_setup_sys (cs_t *mp_sys)
 
 static int mp_setup_usr (hashcat_ctx_t *hashcat_ctx, cs_t *mp_sys, cs_t *mp_usr, const char *buf, const u32 userindex)
 {
-  FILE *fp = fopen (buf, "rb");
+  HCFILE fp;
 
-  if (fp == NULL) // feof() in case if file is empty
+  if (hc_fopen (&fp, buf, "rb") == false)
   {
     const int rc = mp_expand (hashcat_ctx, buf, strlen (buf), mp_sys, mp_usr, userindex, 1);
 
@@ -595,18 +594,18 @@ static int mp_setup_usr (hashcat_ctx_t *hashcat_ctx, cs_t *mp_sys, cs_t *mp_usr,
   {
     char mp_file[1024];
 
-    const size_t nread = hc_fread (mp_file, 1, sizeof (mp_file) - 1, fp);
+    const size_t nread = hc_fread (mp_file, 1, sizeof (mp_file) - 1, &fp);
 
-    if (!feof (fp))
+    if (!hc_feof (&fp))
     {
       event_log_error (hashcat_ctx, "%s: Custom charset file is too large.", buf);
 
-      fclose (fp);
+      hc_fclose (&fp);
 
       return -1;
     }
 
-    fclose (fp);
+    hc_fclose (&fp);
 
     if (nread == 0)
     {
@@ -711,9 +710,9 @@ static int sp_setup_tbl (hashcat_ctx_t *hashcat_ctx)
     return -1;
   }
 
-  FILE *fd = fopen (hcstat, "rb");
+  HCFILE fp;
 
-  if (fd == NULL)
+  if (hc_fopen (&fp, hcstat, "rb") == false)
   {
     event_log_error (hashcat_ctx, "%s: %s", hcstat, strerror (errno));
 
@@ -722,20 +721,20 @@ static int sp_setup_tbl (hashcat_ctx_t *hashcat_ctx)
 
   u8 *inbuf = (u8 *) hcmalloc (s.st_size);
 
-  SizeT inlen = (SizeT) hc_fread (inbuf, 1, s.st_size, fd);
+  SizeT inlen = (SizeT) hc_fread (inbuf, 1, s.st_size, &fp);
 
   if (inlen != (SizeT) s.st_size)
   {
     event_log_error (hashcat_ctx, "%s: Could not read data.", hcstat);
 
-    fclose (fd);
+    hc_fclose (&fp);
 
     hcfree (inbuf);
 
     return -1;
   }
 
-  fclose (fd);
+  hc_fclose (&fp);
 
   u8 *outbuf = (u8 *) hcmalloc (SP_FILESZ);
 
@@ -1090,9 +1089,7 @@ static int mask_append (hashcat_ctx_t *hashcat_ctx, const char *mask, const char
         mask_truncated_next += snprintf (mask_truncated, 256, "%s,", prepend);
       }
 
-      const int rc_truncated_mask = mp_get_truncated_mask (hashcat_ctx, mask, strlen (mask), increment_len, mask_truncated_next);
-
-      if (rc_truncated_mask == -1)
+      if (mp_get_truncated_mask (hashcat_ctx, mask, strlen (mask), increment_len, mask_truncated_next) == -1)
       {
         hcfree (mask_truncated);
 
@@ -1112,7 +1109,7 @@ static int mask_append (hashcat_ctx_t *hashcat_ctx, const char *mask, const char
     {
       // this happens with maskfiles only
 
-      char *prepend_mask;
+      char *prepend_mask = NULL;
 
       hc_asprintf (&prepend_mask, "%s,%s", prepend, mask);
 
@@ -1124,9 +1121,7 @@ static int mask_append (hashcat_ctx_t *hashcat_ctx, const char *mask, const char
     }
     else
     {
-      const int rc = mask_append_final (hashcat_ctx, mask);
-
-      if (rc == -1) return -1;
+      if (mask_append_final (hashcat_ctx, mask) == -1) return -1;
     }
   }
 
@@ -1200,15 +1195,11 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
       {
         mask_ctx->mask = mask_ctx->masks[mask_ctx->masks_pos];
 
-        const int rc_mask_file = mask_ctx_parse_maskfile (hashcat_ctx);
-
-        if (rc_mask_file == -1) return -1;
+        if (mask_ctx_parse_maskfile (hashcat_ctx) == -1) return -1;
 
         mask_ctx->css_buf = (cs_t *) hccalloc (256, sizeof (cs_t));
 
-        const int rc_gen_css = mp_gen_css (hashcat_ctx, mask_ctx->mask, strlen (mask_ctx->mask), mask_ctx->mp_sys, mask_ctx->mp_usr, mask_ctx->css_buf, &mask_ctx->css_cnt);
-
-        if (rc_gen_css == -1) return -1;
+        if (mp_gen_css (hashcat_ctx, mask_ctx->mask, strlen (mask_ctx->mask), mask_ctx->mp_sys, mask_ctx->mp_usr, mask_ctx->css_buf, &mask_ctx->css_cnt) == -1) return -1;
 
         u32 uniq_tbls[SP_PW_MAX][CHARSIZ] = { { 0 } };
 
@@ -1216,32 +1207,24 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
 
         sp_tbl_to_css (mask_ctx->root_table_buf, mask_ctx->markov_table_buf, mask_ctx->root_css_buf, mask_ctx->markov_css_buf, user_options->markov_threshold, uniq_tbls);
 
-        const int rc_get_sum = sp_get_sum (0, mask_ctx->css_cnt, mask_ctx->root_css_buf, &mask_ctx->bfs_cnt);
-
-        if (rc_get_sum == -1)
+        if (sp_get_sum (0, mask_ctx->css_cnt, mask_ctx->root_css_buf, &mask_ctx->bfs_cnt) == -1)
         {
           event_log_error (hashcat_ctx, "Integer overflow detected in keyspace of mask: %s", mask_ctx->mask);
 
           return -1;
         }
 
-        const int rc_update_mp = opencl_session_update_mp (hashcat_ctx);
-
-        if (rc_update_mp == -1) return -1;
+        if (backend_session_update_mp (hashcat_ctx) == -1) return -1;
       }
       else
       {
         mask_ctx->mask = mask_ctx->masks[mask_ctx->masks_pos];
 
-        const int rc_mask_file = mask_ctx_parse_maskfile (hashcat_ctx);
-
-        if (rc_mask_file == -1) return -1;
+        if (mask_ctx_parse_maskfile (hashcat_ctx) == -1) return -1;
 
         mask_ctx->css_buf = (cs_t *) hccalloc (256, sizeof (cs_t));
 
-        const int rc_gen_css = mp_gen_css (hashcat_ctx, mask_ctx->mask, strlen (mask_ctx->mask), mask_ctx->mp_sys, mask_ctx->mp_usr, mask_ctx->css_buf, &mask_ctx->css_cnt);
-
-        if (rc_gen_css == -1) return -1;
+        if (mp_gen_css (hashcat_ctx, mask_ctx->mask, strlen (mask_ctx->mask), mask_ctx->mp_sys, mask_ctx->mp_usr, mask_ctx->css_buf, &mask_ctx->css_cnt) == -1) return -1;
 
         u32 uniq_tbls[SP_PW_MAX][CHARSIZ] = { { 0 } };
 
@@ -1249,40 +1232,30 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
 
         sp_tbl_to_css (mask_ctx->root_table_buf, mask_ctx->markov_table_buf, mask_ctx->root_css_buf, mask_ctx->markov_css_buf, user_options->markov_threshold, uniq_tbls);
 
-        const int rc_get_sum = sp_get_sum (0, mask_ctx->css_cnt, mask_ctx->root_css_buf, &combinator_ctx->combs_cnt);
-
-        if (rc_get_sum == -1)
+        if (sp_get_sum (0, mask_ctx->css_cnt, mask_ctx->root_css_buf, &combinator_ctx->combs_cnt) == -1) return -1;
         {
           event_log_error (hashcat_ctx, "Integer overflow detected in keyspace of mask: %s", mask_ctx->mask);
 
           return -1;
         }
 
-        const int rc_update_mp = opencl_session_update_mp (hashcat_ctx);
-
-        if (rc_update_mp == -1) return -1;
+        if (backend_session_update_mp (hashcat_ctx) == -1) return -1;
       }
     }
 
-    const int rc_update_combinator = opencl_session_update_combinator (hashcat_ctx);
-
-    if (rc_update_combinator == -1) return -1;
+    if (backend_session_update_combinator (hashcat_ctx) == -1) return -1;
   }
   else if (user_options_extra->attack_kern == ATTACK_KERN_BF)
   {
     mask_ctx->mask = mask_ctx->masks[mask_ctx->masks_pos];
 
-    const int rc_mask_file = mask_ctx_parse_maskfile (hashcat_ctx);
-
-    if (rc_mask_file == -1) return -1;
+    if (mask_ctx_parse_maskfile (hashcat_ctx) == -1) return -1;
 
     if (user_options->attack_mode == ATTACK_MODE_BF) // always true
     {
       mask_ctx->css_buf = (cs_t *) hccalloc (256, sizeof (cs_t));
 
-      const int rc_gen_css = mp_gen_css (hashcat_ctx, mask_ctx->mask, strlen (mask_ctx->mask), mask_ctx->mp_sys, mask_ctx->mp_usr, mask_ctx->css_buf, &mask_ctx->css_cnt);
-
-      if (rc_gen_css == -1) return -1;
+      if (mp_gen_css (hashcat_ctx, mask_ctx->mask, strlen (mask_ctx->mask), mask_ctx->mp_sys, mask_ctx->mp_usr, mask_ctx->css_buf, &mask_ctx->css_cnt) == -1) return -1;
 
       // special case for benchmark
 
@@ -1326,15 +1299,11 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
 
       if (hashconfig->opts_type & OPTS_TYPE_PT_UTF16LE)
       {
-        const int rc = mp_css_utf16le_expand (hashcat_ctx);
-
-        if (rc == -1) return -1;
+        if (mp_css_utf16le_expand (hashcat_ctx) == -1) return -1;
       }
       else if (hashconfig->opts_type & OPTS_TYPE_PT_UTF16BE)
       {
-        const int rc = mp_css_utf16be_expand (hashcat_ctx);
-
-        if (rc == -1) return -1;
+        if (mp_css_utf16be_expand (hashcat_ctx) == -1) return -1;
       }
 
       u32 css_cnt_orig = mask_ctx->css_cnt;
@@ -1343,9 +1312,7 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
       {
         if (hashconfig->opti_type & OPTI_TYPE_APPENDED_SALT)
         {
-          const int rc = mp_css_append_salt (hashcat_ctx, &hashes->salts_buf[0]);
-
-          if (rc == -1) return -1;
+          if (mp_css_append_salt (hashcat_ctx, &hashes->salts_buf[0]) == -1) return -1;
         }
       }
 
@@ -1355,9 +1322,7 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
 
       sp_tbl_to_css (mask_ctx->root_table_buf, mask_ctx->markov_table_buf, mask_ctx->root_css_buf, mask_ctx->markov_css_buf, user_options->markov_threshold, uniq_tbls);
 
-      const int rc_get_sum1 = sp_get_sum (0, mask_ctx->css_cnt, mask_ctx->root_css_buf, &status_ctx->words_cnt);
-
-      if (rc_get_sum1 == -1)
+      if (sp_get_sum (0, mask_ctx->css_cnt, mask_ctx->root_css_buf, &status_ctx->words_cnt) == -1)
       {
         event_log_error (hashcat_ctx, "Integer overflow detected in keyspace of mask: %s", mask_ctx->mask);
 
@@ -1370,18 +1335,14 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
 
       mp_css_split_cnt (hashcat_ctx, css_cnt_orig, css_cnt_lr);
 
-      const int rc_get_sum2 = sp_get_sum (0, css_cnt_lr[1], mask_ctx->root_css_buf, &mask_ctx->bfs_cnt);
-
-      if (rc_get_sum2 == -1)
+      if (sp_get_sum (0, css_cnt_lr[1], mask_ctx->root_css_buf, &mask_ctx->bfs_cnt) == -1)
       {
         event_log_error (hashcat_ctx, "Integer overflow detected in keyspace of mask: %s", mask_ctx->mask);
 
         return -1;
       }
 
-      const int rc_update_mp_rl = opencl_session_update_mp_rl (hashcat_ctx, css_cnt_lr[0], css_cnt_lr[1]);
-
-      if (rc_update_mp_rl == -1) return -1;
+      if (backend_session_update_mp_rl (hashcat_ctx, css_cnt_lr[0], css_cnt_lr[1]) == -1) return -1;
     }
   }
 
@@ -1391,15 +1352,15 @@ int mask_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
 int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 {
   const hashconfig_t         *hashconfig          = hashcat_ctx->hashconfig;
-        mask_ctx_t           *mask_ctx            = hashcat_ctx->mask_ctx;
   const user_options_extra_t *user_options_extra  = hashcat_ctx->user_options_extra;
   const user_options_t       *user_options        = hashcat_ctx->user_options;
+  mask_ctx_t                 *mask_ctx            = hashcat_ctx->mask_ctx;
 
   mask_ctx->enabled = false;
 
   if (user_options->example_hashes == true) return 0;
   if (user_options->left           == true) return 0;
-  if (user_options->opencl_info    == true) return 0;
+  if (user_options->backend_info   == true) return 0;
   if (user_options->show           == true) return 0;
   if (user_options->usage          == true) return 0;
   if (user_options->version        == true) return 0;
@@ -1412,9 +1373,7 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
   mask_ctx->root_table_buf   = (hcstat_table_t *) hccalloc (SP_ROOT_CNT,   sizeof (hcstat_table_t));
   mask_ctx->markov_table_buf = (hcstat_table_t *) hccalloc (SP_MARKOV_CNT, sizeof (hcstat_table_t));
 
-  const int rc_setup_tbl = sp_setup_tbl (hashcat_ctx);
-
-  if (rc_setup_tbl == -1) return -1;
+  if (sp_setup_tbl (hashcat_ctx) == -1) return -1;
 
   mask_ctx->root_css_buf   = (cs_t *) hccalloc (SP_PW_MAX,           sizeof (cs_t));
   mask_ctx->markov_css_buf = (cs_t *) hccalloc (SP_PW_MAX * CHARSIZ, sizeof (cs_t));
@@ -1432,10 +1391,10 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
   mp_setup_sys (mask_ctx->mp_sys);
 
-  if (user_options->custom_charset_1) { const int rc = mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_1, 0); if (rc == -1) return -1; }
-  if (user_options->custom_charset_2) { const int rc = mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_2, 1); if (rc == -1) return -1; }
-  if (user_options->custom_charset_3) { const int rc = mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_3, 2); if (rc == -1) return -1; }
-  if (user_options->custom_charset_4) { const int rc = mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_4, 3); if (rc == -1) return -1; }
+  if (user_options->custom_charset_1) { if (mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_1, 0) == -1) return -1; }
+  if (user_options->custom_charset_2) { if (mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_2, 1) == -1) return -1; }
+  if (user_options->custom_charset_3) { if (mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_3, 2) == -1) return -1; }
+  if (user_options->custom_charset_4) { if (mp_setup_usr (hashcat_ctx, mask_ctx->mp_sys, mask_ctx->mp_usr, user_options->custom_charset_4, 3) == -1) return -1; }
 
   if (user_options->attack_mode == ATTACK_MODE_BF)
   {
@@ -1447,9 +1406,7 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
         if (hc_path_exist (arg) == false)
         {
-          const int rc = mask_append (hashcat_ctx, arg, NULL);
-
-          if (rc == -1) return -1;
+          if (mask_append (hashcat_ctx, arg, NULL) == -1) return -1;
         }
         else
         {
@@ -1461,9 +1418,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
             if (hc_path_is_file (arg) == true)
             {
-              FILE *mask_fp = fopen (arg, "r");
+              HCFILE mask_fp;
 
-              if (mask_fp == NULL)
+              if (hc_fopen (&mask_fp, arg, "r") == false)
               {
                 event_log_error (hashcat_ctx, "%s: %s", arg, strerror (errno));
 
@@ -1472,9 +1429,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
               char *line_buf = (char *) hcmalloc (HCBUFSIZ_LARGE);
 
-              while (!feof (mask_fp))
+              while (!hc_feof (&mask_fp))
               {
-                const size_t line_len = fgetl (mask_fp, line_buf);
+                const size_t line_len = fgetl (&mask_fp, line_buf);
 
                 if (line_len == 0) continue;
 
@@ -1493,11 +1450,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
                   mask_buf[-1] = 0;
                 }
 
-                const int rc = mask_append (hashcat_ctx, mask_buf, prepend_buf);
-
-                if (rc == -1)
+                if (mask_append (hashcat_ctx, mask_buf, prepend_buf) == -1)
                 {
-                  fclose (mask_fp);
+                  hc_fclose (&mask_fp);
 
                   return -1;
                 }
@@ -1505,7 +1460,7 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
               hcfree (line_buf);
 
-              fclose (mask_fp);
+              hc_fclose (&mask_fp);
             }
             else
             {
@@ -1520,18 +1475,14 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
       {
         const char *mask = DEF_MASK;
 
-        const int rc = mask_append (hashcat_ctx, mask, NULL);
-
-        if (rc == -1) return -1;
+        if (mask_append (hashcat_ctx, mask, NULL) == -1) return -1;
       }
     }
     else
     {
       const char *mask = hashconfig->benchmark_mask;
 
-      const int rc = mask_append (hashcat_ctx, mask, NULL);
-
-      if (rc == -1) return -1;
+      if (mask_append (hashcat_ctx, mask, NULL) == -1) return -1;
     }
   }
   else if (user_options->attack_mode == ATTACK_MODE_HYBRID1)
@@ -1544,9 +1495,7 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
     if (hc_path_exist (arg) == false)
     {
-      const int rc = mask_append (hashcat_ctx, arg, NULL);
-
-      if (rc == -1) return -1;
+      if (mask_append (hashcat_ctx, arg, NULL) == -1) return -1;
     }
     else
     {
@@ -1554,9 +1503,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
       {
         mask_ctx->mask_from_file = true;
 
-        FILE *mask_fp = fopen (arg, "r");
+        HCFILE mask_fp;
 
-        if (mask_fp == NULL)
+        if (hc_fopen (&mask_fp, arg, "r") == false)
         {
           event_log_error (hashcat_ctx, "%s: %s", arg, strerror (errno));
 
@@ -1565,9 +1514,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
         char *line_buf = (char *) hcmalloc (HCBUFSIZ_LARGE);
 
-        while (!feof (mask_fp))
+        while (!hc_feof (&mask_fp))
         {
-          const size_t line_len = fgetl (mask_fp, line_buf);
+          const size_t line_len = fgetl (&mask_fp, line_buf);
 
           if (line_len == 0) continue;
 
@@ -1586,11 +1535,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
             mask_buf[-1] = 0;
           }
 
-          const int rc = mask_append (hashcat_ctx, mask_buf, prepend_buf);
-
-          if (rc == -1)
+          if (mask_append (hashcat_ctx, mask_buf, prepend_buf) == -1)
           {
-            fclose (mask_fp);
+            hc_fclose (&mask_fp);
 
             return -1;
           }
@@ -1598,7 +1545,7 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
         hcfree (line_buf);
 
-        fclose (mask_fp);
+        hc_fclose (&mask_fp);
       }
       else
       {
@@ -1618,9 +1565,7 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
     if (hc_path_exist (arg) == false)
     {
-      const int rc = mask_append (hashcat_ctx, arg, NULL);
-
-      if (rc == -1) return -1;
+      if (mask_append (hashcat_ctx, arg, NULL) == -1) return -1;
     }
     else
     {
@@ -1628,9 +1573,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
       {
         mask_ctx->mask_from_file = true;
 
-        FILE *mask_fp = fopen (arg, "r");
+        HCFILE mask_fp;
 
-        if (mask_fp == NULL)
+        if (hc_fopen (&mask_fp, arg, "r") == false)
         {
           event_log_error (hashcat_ctx, "%s: %s", arg, strerror (errno));
 
@@ -1639,9 +1584,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
         char *line_buf = (char *) hcmalloc (HCBUFSIZ_LARGE);
 
-        while (!feof (mask_fp))
+        while (!hc_feof (&mask_fp))
         {
-          const size_t line_len = fgetl (mask_fp, line_buf);
+          const size_t line_len = fgetl (&mask_fp, line_buf);
 
           if (line_len == 0) continue;
 
@@ -1660,11 +1605,9 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
             mask_buf[-1] = 0;
           }
 
-          const int rc = mask_append (hashcat_ctx, mask_buf, prepend_buf);
-
-          if (rc == -1)
+          if (mask_append (hashcat_ctx, mask_buf, prepend_buf) == -1)
           {
-            fclose (mask_fp);
+            hc_fclose (&mask_fp);
 
             return -1;
           }
@@ -1672,7 +1615,7 @@ int mask_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
         hcfree (line_buf);
 
-        fclose (mask_fp);
+        hc_fclose (&mask_fp);
       }
       else
       {

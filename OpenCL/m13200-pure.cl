@@ -3,15 +3,24 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_sha1.cl"
 #include "inc_cipher_aes.cl"
+#endif
 
-__kernel void m13200_init (KERN_ATTR_TMPS (axcrypt_tmp_t))
+typedef struct axcrypt_tmp
+{
+  u32 KEK[4];
+  u32 lsb[4];
+  u32 cipher[4];
+
+} axcrypt_tmp_t;
+
+KERNEL_FQ void m13200_init (KERN_ATTR_TMPS (axcrypt_tmp_t))
 {
   /**
    * base
@@ -65,7 +74,7 @@ __kernel void m13200_init (KERN_ATTR_TMPS (axcrypt_tmp_t))
   tmps[gid].cipher[3] = 0;
 }
 
-__kernel void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
+KERNEL_FQ void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -77,17 +86,17 @@ __kernel void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -104,21 +113,21 @@ __kernel void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -157,7 +166,7 @@ __kernel void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
    * aes decrypt key
    */
 
-  AES128_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4);
+  AES128_set_decrypt_key (ks, ukey, s_te0, s_te1, s_te2, s_te3, s_td0, s_td1, s_td2, s_td3);
 
   const u32 wrapping_rounds = salt_bufs[salt_pos].salt_iter - 1;
 
@@ -166,7 +175,7 @@ __kernel void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
   {
     const u32 j2 = j * 2;
 
-    cipher[0] ^= swap32_S (j2 + 2);
+    cipher[0] ^= hc_swap32_S (j2 + 2);
 
     /* R[i] */
     cipher[2] = lsb[2];
@@ -180,7 +189,7 @@ __kernel void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
     lsb[3] = cipher[3];
 
     /* 2nd block treatment */
-    cipher[0] ^= swap32_S (j2 + 1);
+    cipher[0] ^= hc_swap32_S (j2 + 1);
 
     cipher[2] = lsb[0];
     cipher[3] = lsb[1];
@@ -202,7 +211,7 @@ __kernel void m13200_loop (KERN_ATTR_TMPS (axcrypt_tmp_t))
   tmps[gid].cipher[3] = cipher[3];
 }
 
-__kernel void m13200_comp (KERN_ATTR_TMPS (axcrypt_tmp_t))
+KERNEL_FQ void m13200_comp (KERN_ATTR_TMPS (axcrypt_tmp_t))
 {
   /**
    * base
@@ -220,7 +229,7 @@ __kernel void m13200_comp (KERN_ATTR_TMPS (axcrypt_tmp_t))
   {
     if (atomic_inc (&hashes_shown[digests_offset]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, il_pos, 0, 0);
     }
   }
 }

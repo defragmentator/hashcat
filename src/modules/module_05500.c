@@ -9,9 +9,8 @@
 #include "bitops.h"
 #include "convert.h"
 #include "shared.h"
-#include "cpu_des.h"
-#include "cpu_md5.h"
-#include "inc_hash_constants.h"
+#include "emu_inc_cipher_des.h"
+#include "emu_inc_hash_md5.h"
 
 static const u32   ATTACK_EXEC    = ATTACK_EXEC_INSIDE_KERNEL;
 static const u32   DGST_POS0      = 0;
@@ -247,7 +246,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
       dgst[2] = MD5M_C;
       dgst[3] = MD5M_D;
 
-      md5_64 (w, dgst);
+      md5_transform (w + 0, w + 4, w + 8, w + 12, dgst);
 
       salt->salt_buf[0] = dgst[0];
       salt->salt_buf[1] = dgst[1];
@@ -258,19 +257,21 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   for (u32 i = 0; i < 0x10000; i++)
   {
-    u32 key_md4[2] = { i, 0 };
-    u32 key_des[2] = { 0, 0 };
+    u32 key_md4[2] = { 0 };
+    u32 key_des[2] = { 0 };
 
-    transform_netntlmv1_key ((u8 *) key_md4, (u8 *) key_des);
+    key_md4[0] = i;
+
+    transform_netntlmv1_key ((const u8 *) key_md4, (u8 *) key_des);
 
     u32 Kc[16] = { 0 };
     u32 Kd[16] = { 0 };
 
-    _des_keysetup (key_des, Kc, Kd);
+    _des_crypt_keysetup (key_des[0], key_des[1], Kc, Kd, (u32 (*)[64]) c_skb);
 
     u32 data3[2] = { salt->salt_buf[0], salt->salt_buf[1] };
 
-    _des_encrypt (data3, Kc, Kd);
+    _des_crypt_encrypt (data3, data3, Kc, Kd, (u32 (*)[64]) c_SPtrans);
 
     if (data3[0] != digest_tmp[0]) continue;
     if (data3[1] != digest_tmp[1]) continue;
@@ -287,17 +288,15 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   /* precompute netntlmv1 exploit stop */
 
-  u32 tt;
-
-  IP (digest[0], digest[1], tt);
-  IP (digest[2], digest[3], tt);
+  DES_IP (digest[0], digest[1]);
+  DES_IP (digest[2], digest[3]);
 
   digest[0] = rotr32 (digest[0], 29);
   digest[1] = rotr32 (digest[1], 29);
   digest[2] = rotr32 (digest[2], 29);
   digest[3] = rotr32 (digest[3], 29);
 
-  IP (salt->salt_buf[0], salt->salt_buf[1], tt);
+  DES_IP (salt->salt_buf[0], salt->salt_buf[1]);
 
   salt->salt_buf[0] = rotl32 (salt->salt_buf[0], 3);
   salt->salt_buf[1] = rotl32 (salt->salt_buf[1], 3);
@@ -321,15 +320,13 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   tmp[2] = digest[2];
   tmp[3] = digest[3];
 
-  u32 tt;
-
   tmp[0] = rotl32 (tmp[0], 29);
   tmp[1] = rotl32 (tmp[1], 29);
   tmp[2] = rotl32 (tmp[2], 29);
   tmp[3] = rotl32 (tmp[3], 29);
 
-  FP (tmp[1], tmp[0], tt);
-  FP (tmp[3], tmp[2], tt);
+  DES_FP (tmp[1], tmp[0]);
+  DES_FP (tmp[3], tmp[2]);
 
   u8 *out_buf = (u8 *) line_buf;
 
@@ -410,15 +407,18 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_hash_binary_count        = MODULE_DEFAULT;
   module_ctx->module_hash_binary_parse        = MODULE_DEFAULT;
   module_ctx->module_hash_binary_save         = MODULE_DEFAULT;
-  module_ctx->module_hash_decode_outfile      = MODULE_DEFAULT;
+  module_ctx->module_hash_decode_potfile      = MODULE_DEFAULT;
   module_ctx->module_hash_decode_zero_hash    = MODULE_DEFAULT;
   module_ctx->module_hash_decode              = module_hash_decode;
   module_ctx->module_hash_encode_status       = MODULE_DEFAULT;
+  module_ctx->module_hash_encode_potfile      = MODULE_DEFAULT;
   module_ctx->module_hash_encode              = module_hash_encode;
   module_ctx->module_hash_init_selftest       = MODULE_DEFAULT;
   module_ctx->module_hash_mode                = MODULE_DEFAULT;
   module_ctx->module_hash_category            = module_hash_category;
   module_ctx->module_hash_name                = module_hash_name;
+  module_ctx->module_hashes_count_min         = MODULE_DEFAULT;
+  module_ctx->module_hashes_count_max         = MODULE_DEFAULT;
   module_ctx->module_hlfmt_disable            = MODULE_DEFAULT;
   module_ctx->module_hook12                   = MODULE_DEFAULT;
   module_ctx->module_hook23                   = MODULE_DEFAULT;
@@ -438,6 +438,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_opts_type                = module_opts_type;
   module_ctx->module_outfile_check_disable    = MODULE_DEFAULT;
   module_ctx->module_outfile_check_nocomp     = MODULE_DEFAULT;
+  module_ctx->module_potfile_custom_check     = MODULE_DEFAULT;
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;

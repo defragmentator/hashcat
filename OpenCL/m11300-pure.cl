@@ -5,14 +5,28 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha512.cl"
 #include "inc_cipher_aes.cl"
+#endif
+
+typedef struct bitcoin_wallet_tmp
+{
+  u64  dgst[8];
+
+} bitcoin_wallet_tmp_t;
+
+typedef struct bitcoin_wallet
+{
+  u32 cry_master_buf[64];
+  u32 cry_master_len;
+
+} bitcoin_wallet_t;
 
 DECLSPEC void hmac_sha512_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *w4, u32x *w5, u32x *w6, u32x *w7, u64x *ipad, u64x *opad, u64x *digest)
 {
@@ -72,7 +86,7 @@ DECLSPEC void hmac_sha512_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *w
   sha512_transform_vector (w0, w1, w2, w3, w4, w5, w6, w7, digest);
 }
 
-__kernel void m11300_init (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_wallet_t))
+KERNEL_FQ void m11300_init (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_wallet_t))
 {
   /**
    * base
@@ -102,7 +116,7 @@ __kernel void m11300_init (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
   tmps[gid].dgst[7] = ctx.h[7];
 }
 
-__kernel void m11300_loop (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_wallet_t))
+KERNEL_FQ void m11300_loop (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_wallet_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -117,50 +131,17 @@ __kernel void m11300_loop (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
   u64x t6 = pack64v (tmps, dgst, gid, 6);
   u64x t7 = pack64v (tmps, dgst, gid, 7);
 
-  u32x w0[4];
-  u32x w1[4];
-  u32x w2[4];
-  u32x w3[4];
-  u32x w4[4];
-  u32x w5[4];
-  u32x w6[4];
-  u32x w7[4];
-
-  w0[0] = 0;
-  w0[1] = 0;
-  w0[2] = 0;
-  w0[3] = 0;
-  w1[0] = 0;
-  w1[1] = 0;
-  w1[2] = 0;
-  w1[3] = 0;
-  w2[0] = 0;
-  w2[1] = 0;
-  w2[2] = 0;
-  w2[3] = 0;
-  w3[0] = 0;
-  w3[1] = 0;
-  w3[2] = 0;
-  w3[3] = 0;
-  w4[0] = 0x80000000;
-  w4[1] = 0;
-  w4[2] = 0;
-  w4[3] = 0;
-  w5[0] = 0;
-  w5[1] = 0;
-  w5[2] = 0;
-  w5[3] = 0;
-  w6[0] = 0;
-  w6[1] = 0;
-  w6[2] = 0;
-  w6[3] = 0;
-  w7[0] = 0;
-  w7[1] = 0;
-  w7[2] = 0;
-  w7[3] = 64 * 8;
-
   for (u32 i = 0, j = loop_pos; i < loop_cnt; i++, j++)
   {
+    u32x w0[4];
+    u32x w1[4];
+    u32x w2[4];
+    u32x w3[4];
+    u32x w4[4];
+    u32x w5[4];
+    u32x w6[4];
+    u32x w7[4];
+
     w0[0] = h32_from_64 (t0);
     w0[1] = l32_from_64 (t0);
     w0[2] = h32_from_64 (t1);
@@ -177,6 +158,22 @@ __kernel void m11300_loop (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
     w3[1] = l32_from_64 (t6);
     w3[2] = h32_from_64 (t7);
     w3[3] = l32_from_64 (t7);
+    w4[0] = 0x80000000;
+    w4[1] = 0;
+    w4[2] = 0;
+    w4[3] = 0;
+    w5[0] = 0;
+    w5[1] = 0;
+    w5[2] = 0;
+    w5[3] = 0;
+    w6[0] = 0;
+    w6[1] = 0;
+    w6[2] = 0;
+    w6[3] = 0;
+    w7[0] = 0;
+    w7[1] = 0;
+    w7[2] = 0;
+    w7[3] = 64 * 8;
 
     u64x digest[8];
 
@@ -211,7 +208,7 @@ __kernel void m11300_loop (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
   unpack64v (tmps, dgst, gid, 7, t7);
 }
 
-__kernel void m11300_comp (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_wallet_t))
+KERNEL_FQ void m11300_comp (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_wallet_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -223,17 +220,17 @@ __kernel void m11300_comp (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -250,21 +247,21 @@ __kernel void m11300_comp (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -307,7 +304,7 @@ __kernel void m11300_comp (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
 
   u32 ks[KEYLEN];
 
-  AES256_set_decrypt_key (ks, key, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4);
+  AES256_set_decrypt_key (ks, key, s_te0, s_te1, s_te2, s_te3, s_td0, s_td1, s_td2, s_td3);
 
   u32 out[4];
 
@@ -315,10 +312,10 @@ __kernel void m11300_comp (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
   {
     u32 data[4];
 
-    data[0] = swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 0]);
-    data[1] = swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 1]);
-    data[2] = swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 2]);
-    data[3] = swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 3]);
+    data[0] = hc_swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 0]);
+    data[1] = hc_swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 1]);
+    data[2] = hc_swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 2]);
+    data[3] = hc_swap32_S (esalt_bufs[digests_offset].cry_master_buf[(i / 4) + 3]);
 
     AES256_decrypt (ks, data, out, s_td0, s_td1, s_td2, s_td3, s_td4);
 
@@ -340,7 +337,7 @@ __kernel void m11300_comp (KERN_ATTR_TMPS_ESALT (bitcoin_wallet_tmp_t, bitcoin_w
   {
     if (atomic_inc (&hashes_shown[digests_offset]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, digests_offset + 0, gid, 0, 0, 0);
     }
   }
 }

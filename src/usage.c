@@ -5,9 +5,9 @@
 
 #include "common.h"
 #include "types.h"
+#include "memory.h"
 #include "shared.h"
 #include "interface.h"
-#include "memory.h"
 #include "usage.h"
 
 static const char *const USAGE_MINI[] =
@@ -36,6 +36,7 @@ static const char *const USAGE_BIG_PRE_HASHMODES[] =
   "     --hex-wordlist             |      | Assume words in wordlist are given in hex            |",
   "     --force                    |      | Ignore warnings                                      |",
   "     --status                   |      | Enable automatic update of the status screen         |",
+  "     --status-json              |      | Enable JSON format for status ouput                  |",
   "     --status-timer             | Num  | Sets seconds between status screen updates to X      | --status-timer=1",
   "     --stdin-timeout-abort      | Num  | Abort if there is no input from stdin for X seconds  | --stdin-timeout-abort=300",
   "     --machine-readable         |      | Display the status view in a machine-readable format |",
@@ -77,7 +78,8 @@ static const char *const USAGE_BIG_PRE_HASHMODES[] =
   "     --keyboard-layout-mapping  | File | Keyboard layout mapping table for special hash-modes | --keyb=german.hckmap",
   "     --truecrypt-keyfiles       | File | Keyfiles to use, separated with commas               | --truecrypt-keyf=x.png",
   "     --veracrypt-keyfiles       | File | Keyfiles to use, separated with commas               | --veracrypt-keyf=x.txt",
-  "     --veracrypt-pim            | Num  | VeraCrypt personal iterations multiplier             | --veracrypt-pim=1000",
+  "     --veracrypt-pim-start      | Num  | VeraCrypt personal iterations multiplier start       | --veracrypt-pim-start=450",
+  "     --veracrypt-pim-stop       | Num  | VeraCrypt personal iterations multiplier stop        | --veracrypt-pim-stop=500",
   " -b, --benchmark                |      | Run benchmark of selected hash-modes                 |",
   "     --benchmark-all            |      | Run benchmark of all hash-modes (requires -b)        |",
   "     --speed-only               |      | Return expected speed of the attack, then quit       |",
@@ -87,16 +89,15 @@ static const char *const USAGE_BIG_PRE_HASHMODES[] =
   "     --bitmap-max               | Num  | Sets maximum bits allowed for bitmaps to X           | --bitmap-max=24",
   "     --cpu-affinity             | Str  | Locks to CPU devices, separated with commas          | --cpu-affinity=1,2,3",
   "     --example-hashes           |      | Show an example hash for each hash-mode              |",
-  " -I, --opencl-info              |      | Show info about detected OpenCL platforms/devices    | -I",
-  "     --opencl-platforms         | Str  | OpenCL platforms to use, separated with commas       | --opencl-platforms=2",
-  " -d, --opencl-devices           | Str  | OpenCL devices to use, separated with commas         | -d 1",
+  " -I, --backend-info             |      | Show info about detected backend API devices         | -I",
+  " -d, --backend-devices          | Str  | Backend devices to use, separated with commas        | -d 1",
   " -D, --opencl-device-types      | Str  | OpenCL device-types to use, separated with commas    | -D 1",
-  "     --opencl-vector-width      | Num  | Manually override OpenCL vector-width to X           | --opencl-vector=4",
   " -O, --optimized-kernel-enable  |      | Enable optimized kernels (limits password length)    |",
   " -w, --workload-profile         | Num  | Enable a specific workload profile, see pool below   | -w 3",
   " -n, --kernel-accel             | Num  | Manual workload tuning, set outerloop step size to X | -n 64",
   " -u, --kernel-loops             | Num  | Manual workload tuning, set innerloop step size to X | -u 256",
   " -T, --kernel-threads           | Num  | Manual workload tuning, set thread count to X        | -T 64",
+  "     --backend-vector-width     | Num  | Manually override backend vector-width to X          | --backend-vector=4",
   "     --spin-damp                | Num  | Use CPU for device synchronization, in percent       | --spin-damp=50",
   "     --hwmon-disable            |      | Disable temperature and fanspeed reads and triggers  |",
   "     --hwmon-temp-abort         | Num  | Abort if temperature reaches X degrees Celsius       | --hwmon-temp-abort=100",
@@ -197,7 +198,7 @@ static const char *const USAGE_BIG_POST_HASHMODES[] =
   "  d | 0123456789",
   "  h | 0123456789abcdef",
   "  H | 0123456789ABCDEF",
-  "  s |  !\"#$%%&'()*+,-./:;<=>?@[\\]^_`{|}~",
+  "  s |  !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
   "  a | ?l?u?d?s",
   "  b | 0x00 - 0xff",
   "",
@@ -268,16 +269,15 @@ void usage_mini_print (const char *progname)
   {
     printf (USAGE_MINI[i], progname);
 
-    hc_fwrite (EOL, strlen (EOL), 1, stdout);
+    fwrite (EOL, strlen (EOL), 1, stdout);
   }
 }
 
 void usage_big_print (hashcat_ctx_t *hashcat_ctx)
 {
-  folder_config_t *folder_config = hashcat_ctx->folder_config;
-  hashconfig_t    *hashconfig    = hashcat_ctx->hashconfig;
-  module_ctx_t    *module_ctx    = hashcat_ctx->module_ctx;
-  user_options_t  *user_options  = hashcat_ctx->user_options;
+  const folder_config_t *folder_config = hashcat_ctx->folder_config;
+  const hashconfig_t    *hashconfig    = hashcat_ctx->hashconfig;
+        user_options_t  *user_options  = hashcat_ctx->user_options;
 
   char *modulefile = (char *) hcmalloc (HCBUFSIZ_TINY);
 
@@ -315,19 +315,19 @@ void usage_big_print (hashcat_ctx_t *hashcat_ctx)
   {
     printf ("%s", USAGE_BIG_PRE_HASHMODES[i]);
 
-    hc_fwrite (EOL, strlen (EOL), 1, stdout);
+    fwrite (EOL, strlen (EOL), 1, stdout);
   }
 
   //hc_fwrite (EOL, strlen (EOL), 1, stdout);
 
   for (int i = 0; i < usage_sort_cnt; i++)
   {
-    printf ("%7d | %-48s | %s", usage_sort_buf[i].hash_mode, usage_sort_buf[i].hash_name, strhashcategory (usage_sort_buf[i].hash_category));
+    printf ("%7u | %-48s | %s", usage_sort_buf[i].hash_mode, usage_sort_buf[i].hash_name, strhashcategory (usage_sort_buf[i].hash_category));
 
-    hc_fwrite (EOL, strlen (EOL), 1, stdout);
+    fwrite (EOL, strlen (EOL), 1, stdout);
   }
 
-  hc_fwrite (EOL, strlen (EOL), 1, stdout);
+  fwrite (EOL, strlen (EOL), 1, stdout);
 
   for (int i = 0; i < usage_sort_cnt; i++)
   {
@@ -340,8 +340,8 @@ void usage_big_print (hashcat_ctx_t *hashcat_ctx)
   {
     printf ("%s", USAGE_BIG_POST_HASHMODES[i]);
 
-    hc_fwrite (EOL, strlen (EOL), 1, stdout);
+    fwrite (EOL, strlen (EOL), 1, stdout);
   }
 
-  hc_fwrite (EOL, strlen (EOL), 1, stdout);
+  fwrite (EOL, strlen (EOL), 1, stdout);
 }

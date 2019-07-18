@@ -3,17 +3,32 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_sha512.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
-__kernel void m01800_init (KERN_ATTR_TMPS (sha512crypt_tmp_t))
+typedef struct sha512crypt_tmp
+{
+  u64 l_alt_result[8];
+  u64 l_p_bytes[2];
+  u64 l_s_bytes[2];
+
+  // pure version
+
+  u32 alt_result[16];
+  u32 p_bytes[64];
+  u32 s_bytes[64];
+
+} sha512crypt_tmp_t;
+
+KERNEL_FQ void m01800_init (KERN_ATTR_TMPS (sha512crypt_tmp_t))
 {
   /**
    * base
@@ -31,28 +46,28 @@ __kernel void m01800_init (KERN_ATTR_TMPS (sha512crypt_tmp_t))
 
   u32 w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
-    w[idx] = swap32_S (w[idx]);
+    w[idx] = hc_swap32_S (w[idx]);
   }
 
   const u32 salt_len = salt_bufs[salt_pos].salt_len;
 
   u32 s[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
   {
     s[idx] = salt_bufs[salt_pos].salt_buf[idx];
   }
 
-  for (int i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
   {
-    s[idx] = swap32_S (s[idx]);
+    s[idx] = hc_swap32_S (s[idx]);
   }
 
   /**
@@ -298,7 +313,7 @@ __kernel void m01800_init (KERN_ATTR_TMPS (sha512crypt_tmp_t))
   for (int i = 0; i < 64; i++) tmps[gid].s_bytes[i] = s_final[i];
 }
 
-__kernel void m01800_loop (KERN_ATTR_TMPS (sha512crypt_tmp_t))
+KERNEL_FQ void m01800_loop (KERN_ATTR_TMPS (sha512crypt_tmp_t))
 {
   /**
    * base
@@ -382,7 +397,7 @@ __kernel void m01800_loop (KERN_ATTR_TMPS (sha512crypt_tmp_t))
   for (int i = 0; i < 16; i++) tmps[gid].alt_result[i] = alt_result[i];
 }
 
-__kernel void m01800_comp (KERN_ATTR_TMPS (sha512crypt_tmp_t))
+KERNEL_FQ void m01800_comp (KERN_ATTR_TMPS (sha512crypt_tmp_t))
 {
   /**
    * base
@@ -394,12 +409,14 @@ __kernel void m01800_comp (KERN_ATTR_TMPS (sha512crypt_tmp_t))
 
   const u64 lid = get_local_id (0);
 
-  const u32 r0 = swap32_S (tmps[gid].alt_result[0]);
-  const u32 r1 = swap32_S (tmps[gid].alt_result[1]);
-  const u32 r2 = swap32_S (tmps[gid].alt_result[2]);
-  const u32 r3 = swap32_S (tmps[gid].alt_result[3]);
+  const u32 r0 = hc_swap32_S (tmps[gid].alt_result[0]);
+  const u32 r1 = hc_swap32_S (tmps[gid].alt_result[1]);
+  const u32 r2 = hc_swap32_S (tmps[gid].alt_result[2]);
+  const u32 r3 = hc_swap32_S (tmps[gid].alt_result[3]);
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

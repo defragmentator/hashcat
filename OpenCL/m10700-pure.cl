@@ -3,15 +3,16 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_sha256.cl"
 #include "inc_hash_sha384.cl"
 #include "inc_hash_sha512.cl"
 #include "inc_cipher_aes.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
@@ -22,14 +23,48 @@
 #define PUTCHAR_BE(a,p,c) ((u8 *)(a))[(p) ^ 3] = (u8) (c)
 #define GETCHAR_BE(a,p)   ((u8 *)(a))[(p) ^ 3]
 
+typedef struct pdf
+{
+  int  V;
+  int  R;
+  int  P;
+
+  int  enc_md;
+
+  u32  id_buf[8];
+  u32  u_buf[32];
+  u32  o_buf[32];
+
+  int  id_len;
+  int  o_len;
+  int  u_len;
+
+  u32  rc4key[2];
+  u32  rc4data[2];
+
+} pdf_t;
+
+typedef struct pdf17l8_tmp
+{
+  union
+  {
+    u32 dgst32[16];
+    u64 dgst64[8];
+  };
+
+  u32 dgst_len;
+  u32 W_len;
+
+} pdf17l8_tmp_t;
+
 DECLSPEC void aes128_encrypt_cbc (const u32 *aes_ks, u32 *aes_iv, const u32 *in, u32 *out, SHM_TYPE u32 *s_te0, SHM_TYPE u32 *s_te1, SHM_TYPE u32 *s_te2, SHM_TYPE u32 *s_te3, SHM_TYPE u32 *s_te4)
 {
   u32 data[4];
 
-  data[0] = swap32_S (in[0]);
-  data[1] = swap32_S (in[1]);
-  data[2] = swap32_S (in[2]);
-  data[3] = swap32_S (in[3]);
+  data[0] = hc_swap32_S (in[0]);
+  data[1] = hc_swap32_S (in[1]);
+  data[2] = hc_swap32_S (in[2]);
+  data[3] = hc_swap32_S (in[3]);
 
   data[0] ^= aes_iv[0];
   data[1] ^= aes_iv[1];
@@ -43,17 +78,17 @@ DECLSPEC void aes128_encrypt_cbc (const u32 *aes_ks, u32 *aes_iv, const u32 *in,
   aes_iv[2] = out[2];
   aes_iv[3] = out[3];
 
-  out[0] = swap32_S (out[0]);
-  out[1] = swap32_S (out[1]);
-  out[2] = swap32_S (out[2]);
-  out[3] = swap32_S (out[3]);
+  out[0] = hc_swap32_S (out[0]);
+  out[1] = hc_swap32_S (out[1]);
+  out[2] = hc_swap32_S (out[2]);
+  out[3] = hc_swap32_S (out[3]);
 }
 
 DECLSPEC u32 sha256_update_aes_64 (sha256_ctx_t *ctx, u32 *w0, u32 *w1, u32 *w2, u32 *w3, const int len, const u32 *aes_ks, u32 *aes_iv, SHM_TYPE u32 *s_te0, SHM_TYPE u32 *s_te1, SHM_TYPE u32 *s_te2, SHM_TYPE u32 *s_te3, SHM_TYPE u32 *s_te4)
 {
   u32 ex = 0;
 
-  const int pos = ctx->len & 63;
+  MAYBE_VOLATILE const int pos = ctx->len & 63;
 
   ctx->len += len;
 
@@ -224,7 +259,7 @@ DECLSPEC void sha256_final_aes (sha256_ctx_t *ctx, const u32 *aes_ks, u32 *aes_i
 
 DECLSPEC void sha384_update_aes_128 (sha384_ctx_t *ctx, u32 *w0, u32 *w1, u32 *w2, u32 *w3, u32 *w4, u32 *w5, u32 *w6, u32 *w7, const int len, const u32 *aes_ks, u32 *aes_iv, SHM_TYPE u32 *s_te0, SHM_TYPE u32 *s_te1, SHM_TYPE u32 *s_te2, SHM_TYPE u32 *s_te3, SHM_TYPE u32 *s_te4)
 {
-  const int pos = ctx->len & 127;
+  MAYBE_VOLATILE const int pos = ctx->len & 127;
 
   ctx->len += len;
 
@@ -502,7 +537,7 @@ DECLSPEC void sha384_final_aes (sha384_ctx_t *ctx, const u32 *aes_ks, u32 *aes_i
 
 DECLSPEC void sha512_update_aes_128 (sha512_ctx_t *ctx, u32 *w0, u32 *w1, u32 *w2, u32 *w3, u32 *w4, u32 *w5, u32 *w6, u32 *w7, const int len, const u32 *aes_ks, u32 *aes_iv, SHM_TYPE u32 *s_te0, SHM_TYPE u32 *s_te1, SHM_TYPE u32 *s_te2, SHM_TYPE u32 *s_te3, SHM_TYPE u32 *s_te4)
 {
-  const int pos = ctx->len & 127;
+  MAYBE_VOLATILE const int pos = ctx->len & 127;
 
   ctx->len += len;
 
@@ -792,10 +827,10 @@ DECLSPEC int find_sum (const u32 *w, const u32 pw_len, u32 *bb, const u32 *aes_k
     PUTCHAR_BE (data, i, GETCHAR_BE (bb, j));
   }
 
-  data[0] = swap32_S (data[0]);
-  data[1] = swap32_S (data[1]);
-  data[2] = swap32_S (data[2]);
-  data[3] = swap32_S (data[3]);
+  data[0] = hc_swap32_S (data[0]);
+  data[1] = hc_swap32_S (data[1]);
+  data[2] = hc_swap32_S (data[2]);
+  data[3] = hc_swap32_S (data[3]);
 
   data[0] ^= aes_iv[0];
   data[1] ^= aes_iv[1];
@@ -869,21 +904,21 @@ DECLSPEC u32 do_round (const u32 *w, const u32 pw_len, pdf17l8_tmp_t *tmp, SHM_T
 
   u32 aes_key[4];
 
-  aes_key[0] = swap32_S (w0[0]);
-  aes_key[1] = swap32_S (w0[1]);
-  aes_key[2] = swap32_S (w0[2]);
-  aes_key[3] = swap32_S (w0[3]);
+  aes_key[0] = hc_swap32_S (w0[0]);
+  aes_key[1] = hc_swap32_S (w0[1]);
+  aes_key[2] = hc_swap32_S (w0[2]);
+  aes_key[3] = hc_swap32_S (w0[3]);
 
   u32 aes_ks[44];
 
-  aes128_set_encrypt_key (aes_ks, aes_key, s_te0, s_te1, s_te2, s_te3, s_te4);
+  aes128_set_encrypt_key (aes_ks, aes_key, s_te0, s_te1, s_te2, s_te3);
 
   u32 aes_iv[4];
 
-  aes_iv[0] = swap32_S (w1[0]);
-  aes_iv[1] = swap32_S (w1[1]);
-  aes_iv[2] = swap32_S (w1[2]);
-  aes_iv[3] = swap32_S (w1[3]);
+  aes_iv[0] = hc_swap32_S (w1[0]);
+  aes_iv[1] = hc_swap32_S (w1[1]);
+  aes_iv[2] = hc_swap32_S (w1[2]);
+  aes_iv[3] = hc_swap32_S (w1[3]);
 
   // find hash to use
 
@@ -1104,7 +1139,7 @@ DECLSPEC u32 do_round (const u32 *w, const u32 pw_len, pdf17l8_tmp_t *tmp, SHM_T
   return ex;
 }
 
-__kernel void m10700_init (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
+KERNEL_FQ void m10700_init (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
 {
   /**
    * base
@@ -1148,7 +1183,7 @@ __kernel void m10700_init (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
   tmps[gid] = tmp;
 }
 
-__kernel void m10700_loop (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
+KERNEL_FQ void m10700_loop (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -1160,11 +1195,11 @@ __kernel void m10700_loop (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
 
   #ifdef REAL_SHM
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -1175,15 +1210,15 @@ __kernel void m10700_loop (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -1197,9 +1232,9 @@ __kernel void m10700_loop (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
 
   u32 w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
-    w[idx] = swap32_S (pws[gid].i[idx]);
+    w[idx] = hc_swap32_S (pws[gid].i[idx]);
   }
 
   /**
@@ -1226,7 +1261,7 @@ __kernel void m10700_loop (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
   tmps[gid] = tmp;
 }
 
-__kernel void m10700_comp (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
+KERNEL_FQ void m10700_comp (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
 {
   /**
    * modifier
@@ -1249,5 +1284,7 @@ __kernel void m10700_comp (KERN_ATTR_TMPS_ESALT (pdf17l8_tmp_t, pdf_t))
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

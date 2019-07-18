@@ -7,26 +7,21 @@
 #include "types.h"
 #include "memory.h"
 #include "event.h"
-#include "hashes.h"
-
 #include "convert.h"
 #include "debugfile.h"
 #include "filehandling.h"
 #include "hlfmt.h"
-#include "interface.h"
 #include "terminal.h"
 #include "logfile.h"
 #include "loopback.h"
-#include "mpsp.h"
-#include "opencl.h"
+#include "backend.h"
 #include "outfile.h"
 #include "potfile.h"
 #include "rp.h"
 #include "shared.h"
 #include "thread.h"
-#include "timer.h"
 #include "locking.h"
-#include "cpu_crc32.h"
+#include "hashes.h"
 
 #ifdef WITH_BRAIN
 #include "brain.h"
@@ -126,6 +121,50 @@ int sort_by_hash_no_salt (const void *v1, const void *v2, void *v3)
   return sort_by_digest_p0p1 (d1, d2, v3);
 }
 
+int hash_encode (const hashconfig_t *hashconfig, const hashes_t *hashes, const module_ctx_t *module_ctx, char *out_buf, const int out_size, const u32 salt_pos, const u32 digest_pos)
+{
+  if (module_ctx->module_hash_encode == MODULE_DEFAULT)
+  {
+    return snprintf (out_buf, out_size, "%s", hashes->hashfile);
+  }
+
+  salt_t *salts_buf = hashes->salts_buf;
+
+  salts_buf += salt_pos;
+
+  const u32 digest_cur = salts_buf->digests_offset + digest_pos;
+
+  void        *digests_buf    = hashes->digests_buf;
+  void        *esalts_buf     = hashes->esalts_buf;
+  void        *hook_salts_buf = hashes->hook_salts_buf;
+  hashinfo_t **hash_info      = hashes->hash_info;
+
+  char       *digests_buf_ptr    = (char *) digests_buf;
+  char       *esalts_buf_ptr     = (char *) esalts_buf;
+  char       *hook_salts_buf_ptr = (char *) hook_salts_buf;
+  hashinfo_t *hash_info_ptr      = NULL;
+
+  digests_buf_ptr    += digest_cur * hashconfig->dgst_size;
+  esalts_buf_ptr     += digest_cur * hashconfig->esalt_size;
+  hook_salts_buf_ptr += digest_cur * hashconfig->hook_salt_size;
+
+  if (hash_info) hash_info_ptr = hash_info[digest_cur];
+
+  const int out_len = module_ctx->module_hash_encode
+  (
+    hashconfig,
+    digests_buf_ptr,
+    salts_buf,
+    esalts_buf_ptr,
+    hook_salts_buf_ptr,
+    hash_info_ptr,
+    out_buf,
+    out_size
+  );
+
+  return out_len;
+}
+
 int save_hash (hashcat_ctx_t *hashcat_ctx)
 {
   hashes_t        *hashes       = hashcat_ctx->hashes;
@@ -145,9 +184,9 @@ int save_hash (hashcat_ctx_t *hashcat_ctx)
 
   char separator = hashconfig->separator;
 
-  FILE *fp = fopen (new_hashfile, "wb");
+  HCFILE fp;
 
-  if (fp == NULL)
+  if (hc_fopen (&fp, new_hashfile, "wb") == false)
   {
     event_log_error (hashcat_ctx, "%s: %s", new_hashfile, strerror (errno));
 
@@ -157,9 +196,9 @@ int save_hash (hashcat_ctx_t *hashcat_ctx)
     return -1;
   }
 
-  if (lock_file (fp) == -1)
+  if (hc_lockfile (&fp) == -1)
   {
-    fclose (fp);
+    hc_fclose (&fp);
 
     event_log_error (hashcat_ctx, "%s: %s", new_hashfile, strerror (errno));
 
@@ -189,7 +228,7 @@ int save_hash (hashcat_ctx_t *hashcat_ctx)
 
         const int binary_len = module_ctx->module_hash_binary_save (hashes, salt_pos, digest_pos, &binary_buf);
 
-        hc_fwrite (binary_buf, binary_len, 1, fp);
+        hc_fwrite (binary_buf, binary_len, 1, &fp);
 
         hcfree (binary_buf);
       }
@@ -201,25 +240,25 @@ int save_hash (hashcat_ctx_t *hashcat_ctx)
 
           u32 i;
 
-          for (i = 0; i < user->user_len; i++) fputc (user->user_name[i], fp);
+          for (i = 0; i < user->user_len; i++) hc_fputc (user->user_name[i], &fp);
 
-          fputc (separator, fp);
+          hc_fputc (separator, &fp);
         }
 
-        const int out_len = ascii_digest (hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
+        const int out_len = hash_encode (hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
 
         out_buf[out_len] = 0;
 
-        fprintf (fp, "%s" EOL, out_buf);
+        hc_fprintf (&fp, "%s" EOL, out_buf);
       }
     }
   }
 
   hcfree (out_buf);
 
-  fflush (fp);
+  hc_fflush (&fp);
 
-  fclose (fp);
+  hc_fclose (&fp);
 
   unlink (old_hashfile);
 
@@ -264,28 +303,49 @@ void check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pl
   const u32 salt_pos    = plain->salt_pos;
   const u32 digest_pos  = plain->digest_pos;  // relative
 
+  void *tmps = NULL;
+
+  if (hashconfig->opts_type & OPTS_TYPE_COPY_TMPS)
+  {
+    tmps = hcmalloc (hashconfig->tmp_size);
+
+    if (device_param->is_cuda == true)
+    {
+      hc_cuMemcpyDtoH (hashcat_ctx, tmps, device_param->cuda_d_tmps + (plain->gidvid * hashconfig->tmp_size), hashconfig->tmp_size);
+    }
+
+    if (device_param->is_opencl == true)
+    {
+      hc_clEnqueueReadBuffer (hashcat_ctx, device_param->opencl_command_queue, device_param->opencl_d_tmps, CL_TRUE, plain->gidvid * hashconfig->tmp_size, hashconfig->tmp_size, tmps, 0, NULL, NULL);
+    }
+  }
+
   // hash
 
   u8 *out_buf = hashes->out_buf;
 
-  const int out_len = ascii_digest (hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
+  int out_len = hash_encode (hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
 
   out_buf[out_len] = 0;
 
   // plain
 
-  u32 plain_buf[64] = { 0 };
+  u8 plain_buf[256+1];
 
-  u8 *plain_ptr = (u8 *) plain_buf;
+  memset (plain_buf, 0, sizeof (plain_buf));
+
+  u8 *plain_ptr = plain_buf;
   int plain_len = 0;
 
-  build_plain (hashcat_ctx, device_param, plain, plain_buf, &plain_len);
+  build_plain (hashcat_ctx, device_param, plain, (u32 *)plain_buf, &plain_len);
 
   if (module_ctx->module_build_plain_postprocess != MODULE_DEFAULT)
   {
-    u32 temp_buf[64] = { 0 };
+    u8 temp_buf[256+1] = { 0 };
 
-    const int temp_len = module_ctx->module_build_plain_postprocess (hashcat_ctx->hashconfig, hashcat_ctx->hashes, plain_buf, sizeof (plain_buf), plain_len, temp_buf, sizeof (temp_buf));
+    memset (temp_buf, 0, sizeof (temp_buf));
+
+    const int temp_len = module_ctx->module_build_plain_postprocess (hashcat_ctx->hashconfig, hashcat_ctx->hashes, tmps, (u32 *)plain_buf, sizeof (plain_buf), plain_len, (u32 *)temp_buf, sizeof (temp_buf));
 
     if (temp_len < (int) sizeof (plain_buf))
     {
@@ -311,10 +371,6 @@ void check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pl
 
   build_debugdata (hashcat_ctx, device_param, plain, debug_rule_buf, &debug_rule_len, debug_plain_ptr, &debug_plain_len);
 
-  // no need for locking, we're in a mutex protected function
-
-  potfile_write_append (hashcat_ctx, (char *) out_buf, out_len, plain_ptr, plain_len);
-
   // outfile, can be either to file or stdout
   // if an error occurs opening the file, send to stdout as fallback
   // the fp gets opened for each cracked hash so that the user can modify (move) the outfile while hashcat runs
@@ -327,20 +383,66 @@ void check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pl
 
   const int tmp_len = outfile_write (hashcat_ctx, (char *) out_buf, out_len, plain_ptr, plain_len, crackpos, NULL, 0, (char *) tmp_buf);
 
+  EVENT_DATA (EVENT_CRACKER_HASH_CRACKED, tmp_buf, tmp_len);
+
   outfile_write_close (hashcat_ctx);
 
-  EVENT_DATA (EVENT_CRACKER_HASH_CRACKED, tmp_buf, tmp_len);
+  // potfile
+  // we can have either used-defined hooks or reuse the same format as input format
+  // no need for locking, we're in a mutex protected function
+
+  if (module_ctx->module_hash_encode_potfile != MODULE_DEFAULT)
+  {
+    salt_t *salts_buf = hashes->salts_buf;
+
+    salts_buf += salt_pos;
+
+    const u32 digest_cur = salts_buf->digests_offset + digest_pos;
+
+    void        *digests_buf    = hashes->digests_buf;
+    void        *esalts_buf     = hashes->esalts_buf;
+    void        *hook_salts_buf = hashes->hook_salts_buf;
+    hashinfo_t **hash_info      = hashes->hash_info;
+
+    char       *digests_buf_ptr    = (char *) digests_buf;
+    char       *esalts_buf_ptr     = (char *) esalts_buf;
+    char       *hook_salts_buf_ptr = (char *) hook_salts_buf;
+    hashinfo_t *hash_info_ptr      = NULL;
+
+    digests_buf_ptr    += digest_cur * hashconfig->dgst_size;
+    esalts_buf_ptr     += digest_cur * hashconfig->esalt_size;
+    hook_salts_buf_ptr += digest_cur * hashconfig->hook_salt_size;
+
+    if (hash_info) hash_info_ptr = hash_info[digest_cur];
+
+    out_len = module_ctx->module_hash_encode_potfile
+    (
+      hashconfig,
+      digests_buf_ptr,
+      salts_buf,
+      esalts_buf_ptr,
+      hook_salts_buf_ptr,
+      hash_info_ptr,
+      (char *) out_buf,
+      HCBUFSIZ_LARGE,
+      tmps
+    );
+
+    out_buf[out_len] = 0;
+  }
+
+  potfile_write_append (hashcat_ctx, (char *) out_buf, out_len, plain_ptr, plain_len);
 
   // if enabled, update also the loopback file
 
-  if (loopback_ctx->fp != NULL)
+  if (loopback_ctx->fp.pfp != NULL)
   {
     loopback_write_append (hashcat_ctx, plain_ptr, plain_len);
   }
 
   // if enabled, update also the (rule) debug file
 
-  if (debugfile_ctx->fp != NULL)
+  if (debugfile_ctx->fp.pfp != NULL)
   {
     // the next check implies that:
     // - (user_options->attack_mode == ATTACK_MODE_STRAIGHT)
@@ -350,6 +452,11 @@ void check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pl
     {
       debugfile_write_append (hashcat_ctx, debug_rule_buf, debug_rule_len, plain_ptr, plain_len, debug_plain_ptr, debug_plain_len);
     }
+  }
+
+  if (hashconfig->opts_type & OPTS_TYPE_COPY_TMPS)
+  {
+    hcfree (tmps);
   }
 }
 
@@ -365,15 +472,21 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, 
 
   u32 num_cracked;
 
-  cl_int CL_err;
+  int CU_rc;
+  int CL_rc;
 
-  CL_err = hc_clEnqueueReadBuffer (hashcat_ctx, device_param->command_queue, device_param->d_result, CL_TRUE, 0, sizeof (u32), &num_cracked, 0, NULL, NULL);
-
-  if (CL_err != CL_SUCCESS)
+  if (device_param->is_cuda == true)
   {
-    event_log_error (hashcat_ctx, "clEnqueueReadBuffer(): %s", val2cstr_cl (CL_err));
+    CU_rc = hc_cuMemcpyDtoH (hashcat_ctx, &num_cracked, device_param->cuda_d_result, sizeof (u32));
 
-    return -1;
+    if (CU_rc == -1) return -1;
+  }
+
+  if (device_param->is_opencl == true)
+  {
+    CL_rc = hc_clEnqueueReadBuffer (hashcat_ctx, device_param->opencl_command_queue, device_param->opencl_d_result, CL_TRUE, 0, sizeof (u32), &num_cracked, 0, NULL, NULL);
+
+    if (CL_rc == -1) return -1;
   }
 
   if (user_options->speed_only == true)
@@ -388,13 +501,18 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, 
   {
     plain_t *cracked = (plain_t *) hccalloc (num_cracked, sizeof (plain_t));
 
-    CL_err = hc_clEnqueueReadBuffer (hashcat_ctx, device_param->command_queue, device_param->d_plain_bufs, CL_TRUE, 0, num_cracked * sizeof (plain_t), cracked, 0, NULL, NULL);
-
-    if (CL_err != CL_SUCCESS)
+    if (device_param->is_cuda == true)
     {
-      event_log_error (hashcat_ctx, "clEnqueueReadBuffer(): %s", val2cstr_cl (CL_err));
+      CU_rc = hc_cuMemcpyDtoH (hashcat_ctx, cracked, device_param->cuda_d_plain_bufs, num_cracked * sizeof (plain_t));
 
-      return -1;
+      if (CU_rc == -1) return -1;
+    }
+
+    if (device_param->is_opencl == true)
+    {
+      CL_rc = hc_clEnqueueReadBuffer (hashcat_ctx, device_param->opencl_command_queue, device_param->opencl_d_plain_bufs, CL_TRUE, 0, num_cracked * sizeof (plain_t), cracked, 0, NULL, NULL);
+
+      if (CL_rc == -1) return -1;
     }
 
     u32 cpt_cracked = 0;
@@ -458,25 +576,35 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, 
 
       memset (hashes->digests_shown_tmp, 0, salt_buf->digests_cnt * sizeof (u32));
 
-      CL_err = hc_clEnqueueWriteBuffer (hashcat_ctx, device_param->command_queue, device_param->d_digests_shown, CL_TRUE, salt_buf->digests_offset * sizeof (u32), salt_buf->digests_cnt * sizeof (u32), &hashes->digests_shown_tmp[salt_buf->digests_offset], 0, NULL, NULL);
-
-      if (CL_err != CL_SUCCESS)
+      if (device_param->is_cuda == true)
       {
-        event_log_error (hashcat_ctx, "clEnqueueWriteBuffer(): %s", val2cstr_cl (CL_err));
+        CU_rc = hc_cuMemcpyHtoD (hashcat_ctx, device_param->cuda_d_digests_shown + (salt_buf->digests_offset * sizeof (u32)), &hashes->digests_shown_tmp[salt_buf->digests_offset], salt_buf->digests_cnt * sizeof (u32));
 
-        return -1;
+        if (CU_rc == -1) return -1;
+      }
+
+      if (device_param->is_opencl == true)
+      {
+        CL_rc = hc_clEnqueueWriteBuffer (hashcat_ctx, device_param->opencl_command_queue, device_param->opencl_d_digests_shown, CL_TRUE, salt_buf->digests_offset * sizeof (u32), salt_buf->digests_cnt * sizeof (u32), &hashes->digests_shown_tmp[salt_buf->digests_offset], 0, NULL, NULL);
+
+        if (CL_rc == -1) return -1;
       }
     }
 
     num_cracked = 0;
 
-    CL_err = hc_clEnqueueWriteBuffer (hashcat_ctx, device_param->command_queue, device_param->d_result, CL_TRUE, 0, sizeof (u32), &num_cracked, 0, NULL, NULL);
-
-    if (CL_err != CL_SUCCESS)
+    if (device_param->is_cuda == true)
     {
-      event_log_error (hashcat_ctx, "clEnqueueWriteBuffer(): %s", val2cstr_cl (CL_err));
+      CU_rc = hc_cuMemcpyHtoD (hashcat_ctx, device_param->cuda_d_result, &num_cracked, sizeof (u32));
 
-      return -1;
+      if (CU_rc == -1) return -1;
+    }
+
+    if (device_param->is_opencl == true)
+    {
+      CL_rc = hc_clEnqueueWriteBuffer (hashcat_ctx, device_param->opencl_command_queue, device_param->opencl_d_result, CL_TRUE, 0, sizeof (u32), &num_cracked, 0, NULL, NULL);
+
+      if (CL_rc == -1) return -1;
     }
   }
 
@@ -550,9 +678,9 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
     }
     else if (hashlist_mode == HL_MODE_FILE_PLAIN)
     {
-      FILE *fp = NULL;
+      HCFILE fp;
 
-      if ((fp = fopen (hashfile, "rb")) == NULL)
+      if (hc_fopen (&fp, hashfile, "rb") == false)
       {
         event_log_error (hashcat_ctx, "%s: %s", hashfile, strerror (errno));
 
@@ -561,33 +689,31 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
 
       EVENT_DATA (EVENT_HASHLIST_COUNT_LINES_PRE, hashfile, strlen (hashfile));
 
-      hashes_avail = count_lines (fp);
+      hashes_avail = count_lines (&fp);
 
       EVENT_DATA (EVENT_HASHLIST_COUNT_LINES_POST, hashfile, strlen (hashfile));
 
-      rewind (fp);
+      hc_rewind (&fp);
 
       if (hashes_avail == 0)
       {
         event_log_error (hashcat_ctx, "hashfile is empty or corrupt.");
 
-        fclose (fp);
+        hc_fclose (&fp);
 
         return -1;
       }
 
-      hashlist_format = hlfmt_detect (hashcat_ctx, fp, 100); // 100 = max numbers to "scan". could be hashes_avail, too
+      hashlist_format = hlfmt_detect (hashcat_ctx, &fp, 100); // 100 = max numbers to "scan". could be hashes_avail, too
+
+      hc_fclose (&fp);
 
       if ((user_options->remove == true) && (hashlist_format != HLFMT_HASHCAT))
       {
         event_log_error (hashcat_ctx, "Use of --remove is not supported in native hashfile-format mode.");
 
-        fclose (fp);
-
         return -1;
       }
-
-      fclose (fp);
     }
     else if (hashlist_mode == HL_MODE_FILE_BINARY)
     {
@@ -603,6 +729,13 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
       if (module_ctx->module_hash_binary_count != MODULE_DEFAULT)
       {
         const int binary_count = module_ctx->module_hash_binary_count (hashes);
+
+        if (binary_count == 0)
+        {
+          event_log_error (hashcat_ctx, "No hashes loaded.");
+
+          return -1;
+        }
 
         if (binary_count == -1)
         {
@@ -738,7 +871,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
   else if (user_options->stdout_flag == true)
   {
   }
-  else if (user_options->opencl_info == true)
+  else if (user_options->backend_info == true)
   {
   }
   else
@@ -865,9 +998,9 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
     }
     else if (hashlist_mode == HL_MODE_FILE_PLAIN)
     {
-      FILE *fp;
+      HCFILE fp;
 
-      if ((fp = fopen (hashfile, "rb")) == NULL)
+      if (hc_fopen (&fp, hashfile, "rb") == false)
       {
         event_log_error (hashcat_ctx, "%s: %s", hashfile, strerror (errno));
 
@@ -881,11 +1014,11 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
       time_t prev = 0;
       time_t now  = 0;
 
-      while (!feof (fp))
+      while (!hc_feof (&fp))
       {
         line_num++;
 
-        const size_t line_len = fgetl (fp, line_buf);
+        const size_t line_len = fgetl (&fp, line_buf);
 
         if (line_len == 0) continue;
 
@@ -1106,7 +1239,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
 
       hcfree (line_buf);
 
-      fclose (fp);
+      hc_fclose (&fp);
     }
     else if (hashlist_mode == HL_MODE_FILE_BINARY)
     {
@@ -1217,10 +1350,9 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
 
 int hashes_init_stage2 (hashcat_ctx_t *hashcat_ctx)
 {
-  hashconfig_t   *hashconfig   = hashcat_ctx->hashconfig;
-  hashes_t       *hashes       = hashcat_ctx->hashes;
-  user_options_t *user_options = hashcat_ctx->user_options;
-  potfile_ctx_t  *potfile_ctx  = hashcat_ctx->potfile_ctx;
+  const hashconfig_t   *hashconfig   = hashcat_ctx->hashconfig;
+        hashes_t       *hashes       = hashcat_ctx->hashes;
+  const user_options_t *user_options = hashcat_ctx->user_options;
 
   hash_t *hashes_buf = hashes->hashes_buf;
   u32     hashes_cnt = hashes->hashes_cnt;
@@ -1662,7 +1794,9 @@ int hashes_init_selftest (hashcat_ctx_t *hashcat_ctx)
 
       hc_asprintf (&tmpfile_bin, "%s/selftest.hash", folder_config->session_dir);
 
-      FILE *fp = fopen (tmpfile_bin, "wb");
+      HCFILE fp;
+
+      hc_fopen (&fp, tmpfile_bin, "wb");
 
       const size_t st_hash_len = strlen (hashconfig->st_hash);
 
@@ -1670,10 +1804,10 @@ int hashes_init_selftest (hashcat_ctx_t *hashcat_ctx)
       {
         const u8 c = hex_to_u8 ((const u8 *) hashconfig->st_hash + i);
 
-        fputc (c, fp);
+        hc_fputc (c, &fp);
       }
 
-      fclose (fp);
+      hc_fclose (&fp);
 
       parser_status = module_ctx->module_hash_decode (hashconfig, hash.digest, hash.salt, hash.esalt, hash.hook_salt, hash.hash_info, tmpfile_bin, strlen (tmpfile_bin));
 
@@ -1735,8 +1869,6 @@ int hashes_init_benchmark (hashcat_ctx_t *hashcat_ctx)
   if (user_options->benchmark == false) return 0;
 
   if (hashconfig->is_salted == false) return 0;
-
-  hash_t *hashes_buf = hashes->hashes_buf;
 
   if (module_ctx->module_benchmark_salt != MODULE_DEFAULT)
   {

@@ -5,10 +5,9 @@
 
 #include "common.h"
 #include "types.h"
-#include "convert.h"
 #include "event.h"
 #include "memory.h"
-#include "opencl.h"
+#include "backend.h"
 #include "wordlist.h"
 #include "shared.h"
 #include "thread.h"
@@ -16,7 +15,6 @@
 #include "rp.h"
 #include "rp_cpu.h"
 #include "slow_candidates.h"
-#include "user_options.h"
 #include "dispatch.h"
 
 #ifdef WITH_BRAIN
@@ -25,13 +23,13 @@
 
 static u64 get_highest_words_done (const hashcat_ctx_t *hashcat_ctx)
 {
-  const opencl_ctx_t *opencl_ctx = hashcat_ctx->opencl_ctx;
+  const backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
   u64 words_cur = 0;
 
-  for (u32 device_id = 0; device_id < opencl_ctx->devices_cnt; device_id++)
+  for (int backend_devices_idx = 0; backend_devices_idx < backend_ctx->backend_devices_cnt; backend_devices_idx++)
   {
-    hc_device_param_t *device_param = &opencl_ctx->devices_param[device_id];
+    hc_device_param_t *device_param = &backend_ctx->devices_param[backend_devices_idx];
 
     if (device_param->skipped == true) continue;
 
@@ -47,13 +45,13 @@ static u64 get_highest_words_done (const hashcat_ctx_t *hashcat_ctx)
 
 static u64 get_lowest_words_done (const hashcat_ctx_t *hashcat_ctx)
 {
-  const opencl_ctx_t *opencl_ctx = hashcat_ctx->opencl_ctx;
+  const backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
   u64 words_cur = 0xffffffffffffffff;
 
-  for (u32 device_id = 0; device_id < opencl_ctx->devices_cnt; device_id++)
+  for (int backend_devices_idx = 0; backend_devices_idx < backend_ctx->backend_devices_cnt; backend_devices_idx++)
   {
-    hc_device_param_t *device_param = &opencl_ctx->devices_param[device_id];
+    hc_device_param_t *device_param = &backend_ctx->devices_param[backend_devices_idx];
 
     if (device_param->skipped == true) continue;
 
@@ -78,20 +76,20 @@ static int set_kernel_power_final (hashcat_ctx_t *hashcat_ctx, const u64 kernel_
 {
   EVENT (EVENT_SET_KERNEL_POWER_FINAL);
 
-  opencl_ctx_t *opencl_ctx = hashcat_ctx->opencl_ctx;
+  backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
-  opencl_ctx->kernel_power_final = kernel_power_final;
+  backend_ctx->kernel_power_final = kernel_power_final;
 
   return 0;
 }
 
-static u64 get_power (opencl_ctx_t *opencl_ctx, hc_device_param_t *device_param)
+static u64 get_power (backend_ctx_t *backend_ctx, hc_device_param_t *device_param)
 {
-  const u64 kernel_power_final = opencl_ctx->kernel_power_final;
+  const u64 kernel_power_final = backend_ctx->kernel_power_final;
 
   if (kernel_power_final)
   {
-    const double device_factor = (double) device_param->hardware_power / opencl_ctx->hardware_power_all;
+    const double device_factor = (double) device_param->hardware_power / backend_ctx->hardware_power_all;
 
     const u64 words_left_device = (u64) CEIL (kernel_power_final * device_factor);
 
@@ -111,7 +109,7 @@ static u64 get_power (opencl_ctx_t *opencl_ctx, hc_device_param_t *device_param)
 
 static u64 get_work (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, const u64 max)
 {
-  opencl_ctx_t   *opencl_ctx   = hashcat_ctx->opencl_ctx;
+  backend_ctx_t  *backend_ctx  = hashcat_ctx->backend_ctx;
   status_ctx_t   *status_ctx   = hashcat_ctx->status_ctx;
   user_options_t *user_options = hashcat_ctx->user_options;
 
@@ -122,19 +120,19 @@ static u64 get_work (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param
 
   device_param->words_off = words_off;
 
-  const u64 kernel_power_all = opencl_ctx->kernel_power_all;
+  const u64 kernel_power_all = backend_ctx->kernel_power_all;
 
   const u64 words_left = words_base - words_off;
 
   if (words_left < kernel_power_all)
   {
-    if (opencl_ctx->kernel_power_final == 0)
+    if (backend_ctx->kernel_power_final == 0)
     {
       set_kernel_power_final (hashcat_ctx, words_left);
     }
   }
 
-  const u64 kernel_power = get_power (opencl_ctx, device_param);
+  const u64 kernel_power = get_power (backend_ctx, device_param);
 
   u64 work = MIN (words_left, kernel_power);
 
@@ -170,7 +168,12 @@ static int calc_stdin (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_par
 
     iconv_ctx = iconv_open (user_options->encoding_to, user_options->encoding_from);
 
-    if (iconv_ctx == (iconv_t) -1) return -1;
+    if (iconv_ctx == (iconv_t) -1)
+    {
+      hcfree (buf);
+
+      return -1;
+    }
 
     iconv_tmp = (char *) hcmalloc (HCBUFSIZ_TINY);
   }
@@ -341,15 +344,22 @@ HC_API_CALL void *thread_calc_stdin (void *p)
 
   hashcat_ctx_t *hashcat_ctx = thread_param->hashcat_ctx;
 
-  opencl_ctx_t *opencl_ctx = hashcat_ctx->opencl_ctx;
+  backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
-  if (opencl_ctx->enabled == false) return NULL;
+  if (backend_ctx->enabled == false) return NULL;
 
-  hc_device_param_t *device_param = opencl_ctx->devices_param + thread_param->tid;
+  hc_device_param_t *device_param = backend_ctx->devices_param + thread_param->tid;
 
   if (device_param->skipped) return NULL;
 
   if (device_param->skipped_warning == true) return NULL;
+
+  if (device_param->is_cuda == true)
+  {
+    const int rc_cuCtxSetCurrent = hc_cuCtxSetCurrent (hashcat_ctx, device_param->cuda_context);
+
+    if (rc_cuCtxSetCurrent == -1) return NULL;
+  }
 
   const int rc_calc = calc_stdin (hashcat_ctx, device_param);
 
@@ -372,7 +382,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
   mask_ctx_t           *mask_ctx           = hashcat_ctx->mask_ctx;
   straight_ctx_t       *straight_ctx       = hashcat_ctx->straight_ctx;
   combinator_ctx_t     *combinator_ctx     = hashcat_ctx->combinator_ctx;
-  opencl_ctx_t         *opencl_ctx         = hashcat_ctx->opencl_ctx;
+  backend_ctx_t        *backend_ctx        = hashcat_ctx->backend_ctx;
   status_ctx_t         *status_ctx         = hashcat_ctx->status_ctx;
 
   const u32 attack_mode = user_options->attack_mode;
@@ -422,20 +432,16 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
     {
       char *dictfile = straight_ctx->dict;
 
-      FILE *fp = fopen (dictfile, "rb");
+      extra_info_straight_t extra_info_straight;
 
-      if (fp == NULL)
+      memset (&extra_info_straight, 0, sizeof (extra_info_straight));
+
+      if (hc_fopen (&extra_info_straight.fp, dictfile, "rb") == false)
       {
         event_log_error (hashcat_ctx, "%s: %s", dictfile, strerror (errno));
 
         return -1;
       }
-
-      extra_info_straight_t extra_info_straight;
-
-      memset (&extra_info_straight, 0, sizeof (extra_info_straight));
-
-      extra_info_straight.fp = fp;
 
       hashcat_ctx_t *hashcat_ctx_tmp = (hashcat_ctx_t *) hcmalloc (sizeof (hashcat_ctx_t));
 
@@ -447,7 +453,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
       if (rc_wl_data_init == -1)
       {
-        fclose (fp);
+        hc_fclose (&extra_info_straight.fp);
 
         hcfree (hashcat_ctx_tmp->wl_data);
 
@@ -470,7 +476,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
         // this greatly reduces spam on hashcat console
 
-        const u64 pre_rejects_ignore = get_power (opencl_ctx, device_param) / 2;
+        const u64 pre_rejects_ignore = get_power (backend_ctx, device_param) / 2;
 
         while (pre_rejects > pre_rejects_ignore)
         {
@@ -658,7 +664,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
           if (CL_rc == -1)
           {
-            fclose (fp);
+            hc_fclose (&extra_info_straight.fp);
 
             hcfree (hashcat_ctx_tmp->wl_data);
 
@@ -671,7 +677,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
           if (CL_rc == -1)
           {
-            fclose (fp);
+            hc_fclose (&extra_info_straight.fp);
 
             hcfree (hashcat_ctx_tmp->wl_data);
 
@@ -716,7 +722,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
         if (words_fin == 0) break;
       }
 
-      fclose (fp);
+      hc_fclose (&extra_info_straight.fp);
 
       wl_data_destroy (hashcat_ctx_tmp);
 
@@ -742,30 +748,26 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
         combs_file = combinator_ctx->dict1;
       }
 
-      FILE *base_fp = fopen (base_file, "rb");
+      extra_info_combi_t extra_info_combi;
 
-      if (base_fp == NULL)
+      memset (&extra_info_combi, 0, sizeof (extra_info_combi));
+
+      if (hc_fopen (&extra_info_combi.base_fp, base_file, "rb") == false)
       {
         event_log_error (hashcat_ctx, "%s: %s", base_file, strerror (errno));
 
         return -1;
       }
 
-      FILE *combs_fp = fopen (combs_file, "rb");
-
-      if (combs_fp == NULL)
+      if (hc_fopen (&extra_info_combi.combs_fp, combs_file, "rb") == false)
       {
         event_log_error (hashcat_ctx, "%s: %s", combs_file, strerror (errno));
+
+        hc_fclose (&extra_info_combi.base_fp);
 
         return -1;
       }
 
-      extra_info_combi_t extra_info_combi;
-
-      memset (&extra_info_combi, 0, sizeof (extra_info_combi));
-
-      extra_info_combi.base_fp     = base_fp;
-      extra_info_combi.combs_fp    = combs_fp;
       extra_info_combi.scratch_buf = device_param->scratch_buf;
 
       hashcat_ctx_t *hashcat_ctx_tmp = (hashcat_ctx_t *) hcmalloc (sizeof (hashcat_ctx_t));
@@ -778,12 +780,10 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
       if (rc_wl_data_init == -1)
       {
-        fclose (combs_fp);
-
-        fclose (base_fp);
+        hc_fclose (&extra_info_combi.base_fp);
+        hc_fclose (&extra_info_combi.combs_fp);
 
         hcfree (hashcat_ctx_tmp->wl_data);
-
         hcfree (hashcat_ctx_tmp);
 
         return -1;
@@ -803,7 +803,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
         // this greatly reduces spam on hashcat console
 
-        const u64 pre_rejects_ignore = get_power (opencl_ctx, device_param) / 2;
+        const u64 pre_rejects_ignore = get_power (backend_ctx, device_param) / 2;
 
         while (pre_rejects > pre_rejects_ignore)
         {
@@ -991,12 +991,10 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
           if (CL_rc == -1)
           {
-            fclose (combs_fp);
-
-            fclose (base_fp);
+            hc_fclose (&extra_info_combi.base_fp);
+            hc_fclose (&extra_info_combi.combs_fp);
 
             hcfree (hashcat_ctx_tmp->wl_data);
-
             hcfree (hashcat_ctx_tmp);
 
             return -1;
@@ -1006,12 +1004,10 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
           if (CL_rc == -1)
           {
-            fclose (combs_fp);
-
-            fclose (base_fp);
+            hc_fclose (&extra_info_combi.base_fp);
+            hc_fclose (&extra_info_combi.combs_fp);
 
             hcfree (hashcat_ctx_tmp->wl_data);
-
             hcfree (hashcat_ctx_tmp);
 
             return -1;
@@ -1053,14 +1049,12 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
         if (words_fin == 0) break;
       }
 
-      fclose (combs_fp);
-
-      fclose (base_fp);
+      hc_fclose (&extra_info_combi.base_fp);
+      hc_fclose (&extra_info_combi.combs_fp);
 
       wl_data_destroy (hashcat_ctx_tmp);
 
       hcfree (hashcat_ctx_tmp->wl_data);
-
       hcfree (hashcat_ctx_tmp);
     }
     else if (attack_mode == ATTACK_MODE_BF)
@@ -1084,7 +1078,7 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
         // this greatly reduces spam on hashcat console
 
-        const u64 pre_rejects_ignore = get_power (opencl_ctx, device_param) / 2;
+        const u64 pre_rejects_ignore = get_power (backend_ctx, device_param) / 2;
 
         while (pre_rejects > pre_rejects_ignore)
         {
@@ -1317,16 +1311,12 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
       {
         char *dictfile = straight_ctx->dict;
 
-        FILE *combs_fp = fopen (dictfile, "rb");
-
-        if (combs_fp == NULL)
+        if (hc_fopen (&device_param->combs_fp, dictfile, "rb") == false)
         {
           event_log_error (hashcat_ctx, "%s: %s", dictfile, strerror (errno));
 
           return -1;
         }
-
-        device_param->combs_fp = combs_fp;
       }
 
       while (status_ctx->run_thread_level1 == true)
@@ -1383,37 +1373,29 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
         {
           const char *dictfilec = combinator_ctx->dict2;
 
-          FILE *combs_fp = fopen (dictfilec, "rb");
-
-          if (combs_fp == NULL)
+          if (hc_fopen (&device_param->combs_fp, dictfilec, "rb") == false)
           {
             event_log_error (hashcat_ctx, "%s: %s", combinator_ctx->dict2, strerror (errno));
 
             return -1;
           }
-
-          device_param->combs_fp = combs_fp;
         }
         else if (combs_mode == COMBINATOR_MODE_BASE_RIGHT)
         {
           const char *dictfilec = combinator_ctx->dict1;
 
-          FILE *combs_fp = fopen (dictfilec, "rb");
-
-          if (combs_fp == NULL)
+          if (hc_fopen (&device_param->combs_fp, dictfilec, "rb") == false)
           {
             event_log_error (hashcat_ctx, "%s: %s", dictfilec, strerror (errno));
 
             return -1;
           }
-
-          device_param->combs_fp = combs_fp;
         }
       }
 
-      FILE *fd = fopen (dictfile, "rb");
+      HCFILE fp;
 
-      if (fd == NULL)
+      if (hc_fopen (&fp, dictfile, "rb") == false)
       {
         event_log_error (hashcat_ctx, "%s: %s", dictfile, strerror (errno));
 
@@ -1430,9 +1412,9 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
       if (rc_wl_data_init == -1)
       {
-        if (attack_mode == ATTACK_MODE_COMBI) fclose (device_param->combs_fp);
+        if (attack_mode == ATTACK_MODE_COMBI) hc_fclose (&device_param->combs_fp);
 
-        fclose (fd);
+        hc_fclose (&fp);
 
         hcfree (hashcat_ctx_tmp->wl_data);
 
@@ -1471,11 +1453,11 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
           char rule_buf_out[RP_PASSWORD_SIZE];
 
-          for ( ; words_cur < words_off; words_cur++) get_next_word (hashcat_ctx_tmp, fd, &line_buf, &line_len);
+          for ( ; words_cur < words_off; words_cur++) get_next_word (hashcat_ctx_tmp, &fp, &line_buf, &line_len);
 
           for ( ; words_cur < words_fin; words_cur++)
           {
-            get_next_word (hashcat_ctx_tmp, fd, &line_buf, &line_len);
+            get_next_word (hashcat_ctx_tmp, &fp, &line_buf, &line_len);
 
             line_len = (u32) convert_from_hex (hashcat_ctx, line_buf, line_len);
 
@@ -1562,9 +1544,9 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
           if (CL_rc == -1)
           {
-            if (attack_mode == ATTACK_MODE_COMBI) fclose (device_param->combs_fp);
+            if (attack_mode == ATTACK_MODE_COMBI) hc_fclose (&device_param->combs_fp);
 
-            fclose (fd);
+            hc_fclose (&fp);
 
             hcfree (hashcat_ctx_tmp->wl_data);
 
@@ -1577,9 +1559,9 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
           if (CL_rc == -1)
           {
-            if (attack_mode == ATTACK_MODE_COMBI) fclose (device_param->combs_fp);
+            if (attack_mode == ATTACK_MODE_COMBI) hc_fclose (&device_param->combs_fp);
 
-            fclose (fd);
+            hc_fclose (&fp);
 
             hcfree (hashcat_ctx_tmp->wl_data);
 
@@ -1633,9 +1615,9 @@ static int calc (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
         if (words_fin == 0) break;
       }
 
-      if (attack_mode == ATTACK_MODE_COMBI) fclose (device_param->combs_fp);
+      if (attack_mode == ATTACK_MODE_COMBI) hc_fclose (&device_param->combs_fp);
 
-      fclose (fd);
+      hc_fclose (&fp);
 
       wl_data_destroy (hashcat_ctx_tmp);
 
@@ -1660,15 +1642,22 @@ HC_API_CALL void *thread_calc (void *p)
 
   hashcat_ctx_t *hashcat_ctx = thread_param->hashcat_ctx;
 
-  opencl_ctx_t *opencl_ctx = hashcat_ctx->opencl_ctx;
+  backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
-  if (opencl_ctx->enabled == false) return NULL;
+  if (backend_ctx->enabled == false) return NULL;
 
-  hc_device_param_t *device_param = opencl_ctx->devices_param + thread_param->tid;
+  hc_device_param_t *device_param = backend_ctx->devices_param + thread_param->tid;
 
   if (device_param->skipped) return NULL;
 
   if (device_param->skipped_warning == true) return NULL;
+
+  if (device_param->is_cuda == true)
+  {
+    const int rc_cuCtxSetCurrent = hc_cuCtxSetCurrent (hashcat_ctx, device_param->cuda_context);
+
+    if (rc_cuCtxSetCurrent == -1) return NULL;
+  }
 
   const int rc_calc = calc (hashcat_ctx, device_param);
 

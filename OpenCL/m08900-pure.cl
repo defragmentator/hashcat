@@ -3,17 +3,45 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_sha256.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
-DECLSPEC uint4 swap32_4 (uint4 v)
+typedef struct
+{
+  #ifndef SCRYPT_TMP_ELEM
+  #define SCRYPT_TMP_ELEM 1
+  #endif
+
+  uint4 P[SCRYPT_TMP_ELEM];
+
+} scrypt_tmp_t;
+
+#ifdef IS_CUDA
+
+inline __device__ uint4 operator &  (const uint4  a, const u32   b) { return make_uint4 ((a.x &  b  ), (a.y &  b  ), (a.z &  b  ), (a.w &  b  ));  }
+inline __device__ uint4 operator << (const uint4  a, const u32   b) { return make_uint4 ((a.x << b  ), (a.y << b  ), (a.z << b  ), (a.w << b  ));  }
+inline __device__ uint4 operator >> (const uint4  a, const u32   b) { return make_uint4 ((a.x >> b  ), (a.y >> b  ), (a.z >> b  ), (a.w >> b  ));  }
+inline __device__ uint4 operator +  (const uint4  a, const uint4 b) { return make_uint4 ((a.x +  b.x), (a.y +  b.y), (a.z +  b.z), (a.w +  b.w));  }
+inline __device__ uint4 operator ^  (const uint4  a, const uint4 b) { return make_uint4 ((a.x ^  b.x), (a.y ^  b.y), (a.z ^  b.z), (a.w ^  b.w));  }
+inline __device__ uint4 operator |  (const uint4  a, const uint4 b) { return make_uint4 ((a.x |  b.x), (a.y |  b.y), (a.z |  b.z), (a.w |  b.w));  }
+inline __device__ uint4 operator ^= (      uint4 &a, const uint4 b) {                     a.x ^= b.x;   a.y ^= b.y;   a.z ^= b.z;   a.w ^= b.w;    }
+
+inline __device__ uint4 rotate (const uint4 a, const int n)
+{
+  return ((a << n) | ((a >> (32 - n))));
+}
+
+#endif
+
+DECLSPEC uint4 hc_swap32_4 (uint4 v)
 {
   return (rotate ((v & 0x00FF00FF), 24u) | rotate ((v & 0xFF00FF00),  8u));
 }
@@ -29,26 +57,50 @@ DECLSPEC uint4 swap32_4 (uint4 v)
 
 #define ADD_ROTATE_XOR(r,i1,i2,s) (r) ^= rotate ((i1) + (i2), (s));
 
-#define SALSA20_2R()                \
-{                                   \
-  ADD_ROTATE_XOR (X1, X0, X3,  7);  \
-  ADD_ROTATE_XOR (X2, X1, X0,  9);  \
-  ADD_ROTATE_XOR (X3, X2, X1, 13);  \
-  ADD_ROTATE_XOR (X0, X3, X2, 18);  \
-                                    \
-  X1 = X1.s3012;                    \
-  X2 = X2.s2301;                    \
-  X3 = X3.s1230;                    \
-                                    \
-  ADD_ROTATE_XOR (X3, X0, X1,  7);  \
-  ADD_ROTATE_XOR (X2, X3, X0,  9);  \
-  ADD_ROTATE_XOR (X1, X2, X3, 13);  \
-  ADD_ROTATE_XOR (X0, X1, X2, 18);  \
-                                    \
-  X1 = X1.s1230;                    \
-  X2 = X2.s2301;                    \
-  X3 = X3.s3012;                    \
+#ifdef IS_CUDA
+
+#define SALSA20_2R()                        \
+{                                           \
+  ADD_ROTATE_XOR (X1, X0, X3,  7);          \
+  ADD_ROTATE_XOR (X2, X1, X0,  9);          \
+  ADD_ROTATE_XOR (X3, X2, X1, 13);          \
+  ADD_ROTATE_XOR (X0, X3, X2, 18);          \
+                                            \
+  X1 = make_uint4 (X1.w, X1.x, X1.y, X1.z); \
+  X2 = make_uint4 (X2.z, X2.w, X2.x, X2.y); \
+  X3 = make_uint4 (X3.y, X3.z, X3.w, X3.x); \
+                                            \
+  ADD_ROTATE_XOR (X3, X0, X1,  7);          \
+  ADD_ROTATE_XOR (X2, X3, X0,  9);          \
+  ADD_ROTATE_XOR (X1, X2, X3, 13);          \
+  ADD_ROTATE_XOR (X0, X1, X2, 18);          \
+                                            \
+  X1 = make_uint4 (X1.y, X1.z, X1.w, X1.x); \
+  X2 = make_uint4 (X2.z, X2.w, X2.x, X2.y); \
+  X3 = make_uint4 (X3.w, X3.x, X3.y, X3.z); \
 }
+#else
+#define SALSA20_2R()                        \
+{                                           \
+  ADD_ROTATE_XOR (X1, X0, X3,  7);          \
+  ADD_ROTATE_XOR (X2, X1, X0,  9);          \
+  ADD_ROTATE_XOR (X3, X2, X1, 13);          \
+  ADD_ROTATE_XOR (X0, X3, X2, 18);          \
+                                            \
+  X1 = X1.s3012;                            \
+  X2 = X2.s2301;                            \
+  X3 = X3.s1230;                            \
+                                            \
+  ADD_ROTATE_XOR (X3, X0, X1,  7);          \
+  ADD_ROTATE_XOR (X2, X3, X0,  9);          \
+  ADD_ROTATE_XOR (X1, X2, X3, 13);          \
+  ADD_ROTATE_XOR (X0, X1, X2, 18);          \
+                                            \
+  X1 = X1.s1230;                            \
+  X2 = X2.s2301;                            \
+  X3 = X3.s3012;                            \
+}
+#endif
 
 #define SALSA20_8_XOR() \
 {                       \
@@ -125,7 +177,7 @@ DECLSPEC void salsa_r (uint4 *TI)
   }
 }
 
-DECLSPEC void scrypt_smix (uint4 *X, uint4 *T, __global uint4 * restrict V0, __global uint4 * restrict V1, __global uint4 * restrict V2, __global uint4 * restrict V3)
+DECLSPEC void scrypt_smix (uint4 *X, uint4 *T, GLOBAL_AS uint4 *V0, GLOBAL_AS uint4 *V1, GLOBAL_AS uint4 *V2, GLOBAL_AS uint4 *V3)
 {
   #define Coord(xd4,y,z) (((xd4) * ySIZE * zSIZE) + ((y) * zSIZE) + (z))
   #define CO Coord(xd4,y,z)
@@ -138,7 +190,7 @@ DECLSPEC void scrypt_smix (uint4 *X, uint4 *T, __global uint4 * restrict V0, __g
   const u32 xd4 = x / 4;
   const u32 xm4 = x & 3;
 
-  __global uint4 * restrict V;
+  GLOBAL_AS uint4 *V;
 
   switch (xm4)
   {
@@ -153,10 +205,17 @@ DECLSPEC void scrypt_smix (uint4 *X, uint4 *T, __global uint4 * restrict V0, __g
   #endif
   for (u32 i = 0; i < STATE_CNT4; i += 4)
   {
+    #ifdef IS_CUDA
+    T[0] = make_uint4 (X[i + 0].x, X[i + 1].y, X[i + 2].z, X[i + 3].w);
+    T[1] = make_uint4 (X[i + 1].x, X[i + 2].y, X[i + 3].z, X[i + 0].w);
+    T[2] = make_uint4 (X[i + 2].x, X[i + 3].y, X[i + 0].z, X[i + 1].w);
+    T[3] = make_uint4 (X[i + 3].x, X[i + 0].y, X[i + 1].z, X[i + 2].w);
+    #else
     T[0] = (uint4) (X[i + 0].x, X[i + 1].y, X[i + 2].z, X[i + 3].w);
     T[1] = (uint4) (X[i + 1].x, X[i + 2].y, X[i + 3].z, X[i + 0].w);
     T[2] = (uint4) (X[i + 2].x, X[i + 3].y, X[i + 0].z, X[i + 1].w);
     T[3] = (uint4) (X[i + 3].x, X[i + 0].y, X[i + 1].z, X[i + 2].w);
+    #endif
 
     X[i + 0] = T[0];
     X[i + 1] = T[1];
@@ -193,10 +252,17 @@ DECLSPEC void scrypt_smix (uint4 *X, uint4 *T, __global uint4 * restrict V0, __g
   #endif
   for (u32 i = 0; i < STATE_CNT4; i += 4)
   {
+    #ifdef IS_CUDA
+    T[0] = make_uint4 (X[i + 0].x, X[i + 3].y, X[i + 2].z, X[i + 1].w);
+    T[1] = make_uint4 (X[i + 1].x, X[i + 0].y, X[i + 3].z, X[i + 2].w);
+    T[2] = make_uint4 (X[i + 2].x, X[i + 1].y, X[i + 0].z, X[i + 3].w);
+    T[3] = make_uint4 (X[i + 3].x, X[i + 2].y, X[i + 1].z, X[i + 0].w);
+    #else
     T[0] = (uint4) (X[i + 0].x, X[i + 3].y, X[i + 2].z, X[i + 1].w);
     T[1] = (uint4) (X[i + 1].x, X[i + 0].y, X[i + 3].z, X[i + 2].w);
     T[2] = (uint4) (X[i + 2].x, X[i + 1].y, X[i + 0].z, X[i + 3].w);
     T[3] = (uint4) (X[i + 3].x, X[i + 2].y, X[i + 1].z, X[i + 0].w);
+    #endif
 
     X[i + 0] = T[0];
     X[i + 1] = T[1];
@@ -205,9 +271,7 @@ DECLSPEC void scrypt_smix (uint4 *X, uint4 *T, __global uint4 * restrict V0, __g
   }
 }
 
-// there can be no __attribute__((reqd_work_group_size(16, 1, 1))) because kernel is used by both -m 8900 and -m 9300
-
-__kernel void m08900_init (KERN_ATTR_TMPS (scrypt_tmp_t))
+KERNEL_FQ void m08900_init (KERN_ATTR_TMPS (scrypt_tmp_t))
 {
   /**
    * base
@@ -264,24 +328,29 @@ __kernel void m08900_init (KERN_ATTR_TMPS (scrypt_tmp_t))
     digest[6] = sha256_hmac_ctx2.opad.h[6];
     digest[7] = sha256_hmac_ctx2.opad.h[7];
 
+    #ifdef IS_CUDA
+    const uint4 tmp0 = make_uint4 (digest[0], digest[1], digest[2], digest[3]);
+    const uint4 tmp1 = make_uint4 (digest[4], digest[5], digest[6], digest[7]);
+    #else
     const uint4 tmp0 = (uint4) (digest[0], digest[1], digest[2], digest[3]);
     const uint4 tmp1 = (uint4) (digest[4], digest[5], digest[6], digest[7]);
+    #endif
 
     tmps[gid].P[k + 0] = tmp0;
     tmps[gid].P[k + 1] = tmp1;
   }
 }
 
-__kernel void m08900_loop (KERN_ATTR_TMPS (scrypt_tmp_t))
+KERNEL_FQ void m08900_loop (KERN_ATTR_TMPS (scrypt_tmp_t))
 {
   const u64 gid = get_global_id (0);
 
   if (gid >= gid_max) return;
 
-  __global uint4 * restrict d_scrypt0_buf = d_extra0_buf;
-  __global uint4 * restrict d_scrypt1_buf = d_extra1_buf;
-  __global uint4 * restrict d_scrypt2_buf = d_extra2_buf;
-  __global uint4 * restrict d_scrypt3_buf = d_extra3_buf;
+  GLOBAL_AS uint4 *d_scrypt0_buf = (GLOBAL_AS uint4 *) d_extra0_buf;
+  GLOBAL_AS uint4 *d_scrypt1_buf = (GLOBAL_AS uint4 *) d_extra1_buf;
+  GLOBAL_AS uint4 *d_scrypt2_buf = (GLOBAL_AS uint4 *) d_extra2_buf;
+  GLOBAL_AS uint4 *d_scrypt3_buf = (GLOBAL_AS uint4 *) d_extra3_buf;
 
   uint4 X[STATE_CNT4];
   uint4 T[STATE_CNT4];
@@ -289,28 +358,28 @@ __kernel void m08900_loop (KERN_ATTR_TMPS (scrypt_tmp_t))
   #ifdef _unroll
   #pragma unroll
   #endif
-  for (int z = 0; z < STATE_CNT4; z++) X[z] = swap32_4 (tmps[gid].P[z]);
+  for (int z = 0; z < STATE_CNT4; z++) X[z] = hc_swap32_4 (tmps[gid].P[z]);
 
   scrypt_smix (X, T, d_scrypt0_buf, d_scrypt1_buf, d_scrypt2_buf, d_scrypt3_buf);
 
   #ifdef _unroll
   #pragma unroll
   #endif
-  for (int z = 0; z < STATE_CNT4; z++) tmps[gid].P[z] = swap32_4 (X[z]);
+  for (int z = 0; z < STATE_CNT4; z++) tmps[gid].P[z] = hc_swap32_4 (X[z]);
 
   #if SCRYPT_P >= 1
   for (int i = STATE_CNT4; i < SCRYPT_CNT4; i += STATE_CNT4)
   {
-    for (int z = 0; z < STATE_CNT4; z++) X[z] = swap32_4 (tmps[gid].P[i + z]);
+    for (int z = 0; z < STATE_CNT4; z++) X[z] = hc_swap32_4 (tmps[gid].P[i + z]);
 
     scrypt_smix (X, T, d_scrypt0_buf, d_scrypt1_buf, d_scrypt2_buf, d_scrypt3_buf);
 
-    for (int z = 0; z < STATE_CNT4; z++) tmps[gid].P[i + z] = swap32_4 (X[z]);
+    for (int z = 0; z < STATE_CNT4; z++) tmps[gid].P[i + z] = hc_swap32_4 (X[z]);
   }
   #endif
 }
 
-__kernel void m08900_comp (KERN_ATTR_TMPS (scrypt_tmp_t))
+KERNEL_FQ void m08900_comp (KERN_ATTR_TMPS (scrypt_tmp_t))
 {
   /**
    * base
@@ -340,31 +409,31 @@ __kernel void m08900_comp (KERN_ATTR_TMPS (scrypt_tmp_t))
 
     tmp = tmps[gid].P[l + 0];
 
-    w0[0] = tmp.s0;
-    w0[1] = tmp.s1;
-    w0[2] = tmp.s2;
-    w0[3] = tmp.s3;
+    w0[0] = tmp.x;
+    w0[1] = tmp.y;
+    w0[2] = tmp.z;
+    w0[3] = tmp.w;
 
     tmp = tmps[gid].P[l + 1];
 
-    w1[0] = tmp.s0;
-    w1[1] = tmp.s1;
-    w1[2] = tmp.s2;
-    w1[3] = tmp.s3;
+    w1[0] = tmp.x;
+    w1[1] = tmp.y;
+    w1[2] = tmp.z;
+    w1[3] = tmp.w;
 
     tmp = tmps[gid].P[l + 2];
 
-    w2[0] = tmp.s0;
-    w2[1] = tmp.s1;
-    w2[2] = tmp.s2;
-    w2[3] = tmp.s3;
+    w2[0] = tmp.x;
+    w2[1] = tmp.y;
+    w2[2] = tmp.z;
+    w2[3] = tmp.w;
 
     tmp = tmps[gid].P[l + 3];
 
-    w3[0] = tmp.s0;
-    w3[1] = tmp.s1;
-    w3[2] = tmp.s2;
-    w3[3] = tmp.s3;
+    w3[0] = tmp.x;
+    w3[1] = tmp.y;
+    w3[2] = tmp.z;
+    w3[3] = tmp.w;
 
     sha256_hmac_update_64 (&ctx, w0, w1, w2, w3, 64);
   }
@@ -390,12 +459,14 @@ __kernel void m08900_comp (KERN_ATTR_TMPS (scrypt_tmp_t))
 
   sha256_hmac_final (&ctx);
 
-  const u32 r0 = swap32_S (ctx.opad.h[DGST_R0]);
-  const u32 r1 = swap32_S (ctx.opad.h[DGST_R1]);
-  const u32 r2 = swap32_S (ctx.opad.h[DGST_R2]);
-  const u32 r3 = swap32_S (ctx.opad.h[DGST_R3]);
+  const u32 r0 = hc_swap32_S (ctx.opad.h[DGST_R0]);
+  const u32 r1 = hc_swap32_S (ctx.opad.h[DGST_R1]);
+  const u32 r2 = hc_swap32_S (ctx.opad.h[DGST_R2]);
+  const u32 r3 = hc_swap32_S (ctx.opad.h[DGST_R3]);
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

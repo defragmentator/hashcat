@@ -6,7 +6,7 @@ AMD GPUs on Windows require "AMD Radeon Software Crimson Edition" (15.12 or late
 Intel CPUs require "OpenCL Runtime for Intel Core and Intel Xeon Processors" (16.1.1 or later)
 Intel GPUs on Linux require "OpenCL 2.0 GPU Driver Package for Linux" (2.0 or later)
 Intel GPUs on Windows require "OpenCL Driver for Intel Iris and Intel HD Graphics"
-NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
+NVIDIA GPUs require "NVIDIA Driver" (418.56 or later) and "CUDA Toolkit" (10.1 or later)
 
 ##
 ## Features
@@ -110,6 +110,9 @@ NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
 - PBKDF2-HMAC-SHA1
 - PBKDF2-HMAC-SHA256
 - PBKDF2-HMAC-SHA512
+- Python passlib pbkdf2-sha1
+- Python passlib pbkdf2-sha256
+- Python passlib pbkdf2-sha512
 - Skype
 - WPA-EAPOL-PBKDF2
 - WPA-EAPOL-PMK
@@ -122,13 +125,16 @@ NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
 - NetNTLMv1+ESS
 - NetNTLMv2
 - IPMI2 RAKP HMAC-SHA1
-- Kerberos 5 AS-REQ Pre-Auth etype 23
+- Kerberos 5 AS-REQ Pre-Auth etype 23            
+- Kerberos 5 AS-REP etype 23                     
+- Kerberos 5 TGS-REP etype 23 (RC4-HMAC-MD5)       
+- Kerberos 5 Pre-Auth etype 17/18 (AES128-CTS-HMAC-SHA1-96)
+- Kerberos 5 TGS-REP etype 17/18 (AES128-CTS-HMAC-SHA1-96)
 - DNSSEC (NSEC3)
 - CRAM-MD5
 - PostgreSQL CRAM (MD5)
 - MySQL CRAM (SHA1)
 - SIP digest authentication (MD5)
-- Kerberos 5 TGS-REP etype 23
 - TACACS+
 - JWT (JSON Web Token)
 - SMF (Simple Machines Forum) > v1.1
@@ -221,12 +227,15 @@ NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
 - Lotus Notes/Domino 8
 - PeopleSoft
 - PeopleSoft PS_TOKEN
+- Oracle Transportation Management (SHA256)
 - 7-Zip
 - RAR3-hp
 - RAR5
 - AxCrypt
 - AxCrypt in-memory SHA1
 - WinZip
+- PKZIP archive encryption
+- PKZIP Master Key
 - iTunes backup < 10.0
 - iTunes backup >= 10.0
 - Android Backup
@@ -236,6 +245,7 @@ NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
 - eCryptfs
 - VeraCrypt
 - LUKS
+- DiskCryptor
 - FileVault 2
 - Apple File System (APFS)
 - MS Office <= 2003
@@ -258,14 +268,13 @@ NVIDIA GPUs require "NVIDIA Driver" (367.x or later)
 - Blockchain, My Wallet
 - Blockchain, My Wallet, V2
 - Blockchain, My Wallet, Second Password (SHA256)
-- Electrum Wallet (Salt-Type 1-2)
+- Electrum Wallet (Salt-Type 1-3)
 - KeePass 1 (AES/Twofish) and KeePass 2 (AES)
 - JKS Java Key Store Private Keys (SHA1)
 - Ethereum Wallet, PBKDF2-HMAC-SHA256
 - Ethereum Wallet, SCRYPT
 - Ethereum Pre-Sale Wallet, PBKDF2-HMAC-SHA256
 - Ansible Vault
-- Kerberos 5 AS-REP etype 23
 - Plaintext
 
 ##

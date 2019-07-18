@@ -5,16 +5,27 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha256.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
+
+typedef struct sha256aix_tmp
+{
+  u32 ipad[8];
+  u32 opad[8];
+
+  u32 dgst[8];
+  u32 out[8];
+
+} sha256aix_tmp_t;
 
 DECLSPEC void hmac_sha256_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, u32x *opad, u32x *digest)
 {
@@ -58,7 +69,7 @@ DECLSPEC void hmac_sha256_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *i
   sha256_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m06400_init (KERN_ATTR_TMPS (sha256aix_tmp_t))
+KERNEL_FQ void m06400_init (KERN_ATTR_TMPS (sha256aix_tmp_t))
 {
   /**
    * base
@@ -142,7 +153,7 @@ __kernel void m06400_init (KERN_ATTR_TMPS (sha256aix_tmp_t))
   }
 }
 
-__kernel void m06400_loop (KERN_ATTR_TMPS (sha256aix_tmp_t))
+KERNEL_FQ void m06400_loop (KERN_ATTR_TMPS (sha256aix_tmp_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -248,7 +259,7 @@ __kernel void m06400_loop (KERN_ATTR_TMPS (sha256aix_tmp_t))
   }
 }
 
-__kernel void m06400_comp (KERN_ATTR_TMPS (sha256aix_tmp_t))
+KERNEL_FQ void m06400_comp (KERN_ATTR_TMPS (sha256aix_tmp_t))
 {
   /**
    * base
@@ -282,5 +293,7 @@ __kernel void m06400_comp (KERN_ATTR_TMPS (sha256aix_tmp_t))
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

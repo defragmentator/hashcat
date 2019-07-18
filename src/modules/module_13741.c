@@ -21,9 +21,8 @@ static const u32   DGST_POS3      = 3;
 static const u32   DGST_SIZE      = DGST_SIZE_4_5;
 static const u32   HASH_CATEGORY  = HASH_CATEGORY_FDE;
 static const char *HASH_NAME      = "VeraCrypt RIPEMD160 + XTS 512 bit + boot-mode";
-static const u64   KERN_TYPE      = 6211;
-static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
-                                  | OPTI_TYPE_SLOW_HASH_SIMD_LOOP;
+static const u64   KERN_TYPE      = 13711;
+static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE;
 static const u64   OPTS_TYPE      = OPTS_TYPE_PT_GENERATE_LE
                                   | OPTS_TYPE_BINARY_HASHFILE
                                   | OPTS_TYPE_KEYBOARD_MAPPING;
@@ -46,7 +45,7 @@ u32         module_salt_type      (MAYBE_UNUSED const hashconfig_t *hashconfig, 
 const char *module_st_hash        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_HASH;         }
 const char *module_st_pass        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_PASS;         }
 
-typedef struct tc_tmp
+typedef struct vc_tmp
 {
   u32 ipad[16];
   u32 opad[16];
@@ -54,9 +53,12 @@ typedef struct tc_tmp
   u32 dgst[64];
   u32 out[64];
 
-} tc_tmp_t;
+  u32 pim_key[64];
+  int pim; // marker for cracked
 
-typedef struct tc
+} vc_tmp_t;
+
+typedef struct vc
 {
   u32 salt_buf[32];
   u32 data_buf[112];
@@ -66,21 +68,47 @@ typedef struct tc
   keyboard_layout_mapping_t keyboard_layout_mapping_buf[256];
   int                       keyboard_layout_mapping_cnt;
 
-} tc_t;
+  int pim_multi; // 2048 for boot (not SHA-512 or Whirlpool), 1000 for others
+  int pim_start;
+  int pim_stop;
+
+} vc_t;
 
 static const int   ROUNDS_VERACRYPT_327661     = 327661;
 static const float MIN_SUFFICIENT_ENTROPY_FILE = 7.0f;
 
-int module_build_plain_postprocess (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const hashes_t *hashes, const u32 *src_buf, MAYBE_UNUSED const size_t src_sz, const int src_len, u32 *dst_buf, MAYBE_UNUSED const size_t dst_sz)
+char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
-  const tc_t *tc = (const tc_t *) hashes->esalts_buf;
+  char *jit_build_options = NULL;
 
-  if (src_len < (int) dst_sz)
+  if (device_param->opencl_device_vendor_id == VENDOR_ID_AMD)
   {
-    memcpy (dst_buf, src_buf, src_len);
+    hc_asprintf (&jit_build_options, "-D NO_UNROLL");
   }
 
-  return execute_keyboard_layout_mapping (dst_buf, src_len, tc->keyboard_layout_mapping_buf, tc->keyboard_layout_mapping_cnt);
+  return jit_build_options;
+}
+
+int module_build_plain_postprocess (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const void *tmps, const u32 *src_buf, MAYBE_UNUSED const size_t src_sz, MAYBE_UNUSED const int src_len, u32 *dst_buf, MAYBE_UNUSED const size_t dst_sz)
+{
+  const vc_t *vc = (const vc_t *) hashes->esalts_buf;
+
+  u32 tmp_buf[64] = { 0 };
+
+  memcpy (tmp_buf, src_buf, src_len);
+
+  execute_keyboard_layout_mapping (tmp_buf, src_len, vc->keyboard_layout_mapping_buf, vc->keyboard_layout_mapping_cnt);
+
+  const vc_tmp_t *vc_tmp = (const vc_tmp_t *) tmps;
+
+  if (vc_tmp->pim == 0)
+  {
+    return snprintf ((char *) dst_buf, dst_sz, "%s", (char *) tmp_buf);
+  }
+  else
+  {
+    return snprintf ((char *) dst_buf, dst_sz, "%s   (PIM=%d)", (char *) tmp_buf, vc_tmp->pim);
+  }
 }
 
 bool module_potfile_disable (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
@@ -99,14 +127,14 @@ bool module_outfile_check_disable (MAYBE_UNUSED const hashconfig_t *hashconfig, 
 
 u64 module_esalt_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
-  const u64 esalt_size = (const u64) sizeof (tc_t);
+  const u64 esalt_size = (const u64) sizeof (vc_t);
 
   return esalt_size;
 }
 
 u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
-  const u64 tmp_size = (const u64) sizeof (tc_tmp_t);
+  const u64 tmp_size = (const u64) sizeof (vc_tmp_t);
 
   return tmp_size;
 }
@@ -145,17 +173,17 @@ int module_hash_binary_parse (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE
 {
   // note: if module_hash_binary_parse exists, then module_hash_decode is not called
 
-  FILE *fp = fopen (hashes->hashfile, "rb");
+  HCFILE fp;
 
-  if (fp == NULL) return (PARSER_HASH_FILE);
+  if (hc_fopen (&fp, hashes->hashfile, "rb") == false) return (PARSER_HASH_FILE);
 
   #define VC_HEADER_SIZE 512
 
   char *in = (char *) hcmalloc (VC_HEADER_SIZE);
 
-  const size_t n = hc_fread (in, 1, VC_HEADER_SIZE, fp);
+  const size_t n = hc_fread (in, 1, VC_HEADER_SIZE, &fp);
 
-  fclose (fp);
+  hc_fclose (&fp);
 
   if (n != VC_HEADER_SIZE) return (PARSER_VC_FILE_SIZE);
 
@@ -171,7 +199,7 @@ int module_hash_binary_parse (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE
 
   // keyfiles
 
-  tc_t *tc = (tc_t *) hash->esalt;
+  vc_t *vc = (vc_t *) hash->esalt;
 
   if (user_options->veracrypt_keyfiles)
   {
@@ -185,7 +213,7 @@ int module_hash_binary_parse (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE
     {
       if (hc_path_read (keyfile))
       {
-        cpu_crc32 (keyfile, (u8 *) tc->keyfile_buf);
+        cpu_crc32 (keyfile, (u8 *) vc->keyfile_buf);
       }
 
       keyfile = strtok_r ((char *) NULL, ",", &saveptr);
@@ -200,7 +228,7 @@ int module_hash_binary_parse (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE
   {
     if (hc_path_read (user_options->keyboard_layout_mapping))
     {
-      initialize_keyboard_layout_mapping (user_options->keyboard_layout_mapping, tc->keyboard_layout_mapping_buf, &tc->keyboard_layout_mapping_cnt);
+      initialize_keyboard_layout_mapping (user_options->keyboard_layout_mapping, vc->keyboard_layout_mapping_buf, &vc->keyboard_layout_mapping_cnt);
     }
   }
 
@@ -208,10 +236,12 @@ int module_hash_binary_parse (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE
 
   salt_t *salt = hash->salt;
 
-  if (user_options->veracrypt_pim)
+  if ((user_options->veracrypt_pim_start) && (user_options->veracrypt_pim_stop))
   {
-    salt->salt_iter = user_options->veracrypt_pim * 2048;
+    vc->pim_start = user_options->veracrypt_pim_start;
+    vc->pim_stop  = user_options->veracrypt_pim_stop;
 
+    salt->salt_iter = vc->pim_stop * 2048;
     salt->salt_iter--;
   }
 
@@ -222,25 +252,30 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 {
   u32 *digest = (u32 *) digest_buf;
 
-  tc_t *tc = (tc_t *) esalt_buf;
+  vc_t *vc = (vc_t *) esalt_buf;
 
   const float entropy = get_entropy ((const u8 *) line_buf, line_len);
 
   if (entropy < MIN_SUFFICIENT_ENTROPY_FILE) return (PARSER_INSUFFICIENT_ENTROPY);
 
-  memcpy (tc->salt_buf, line_buf, 64);
+  memcpy (vc->salt_buf, line_buf, 64);
 
-  memcpy (tc->data_buf, line_buf + 64, 512 - 64);
+  memcpy (vc->data_buf, line_buf + 64, 512 - 64);
 
-  salt->salt_buf[0] = tc->salt_buf[0];
+  salt->salt_buf[0] = vc->salt_buf[0];
 
   salt->salt_len = 4;
 
-  salt->salt_iter = ROUNDS_VERACRYPT_327661 - 1;
+  salt->salt_iter = ROUNDS_VERACRYPT_327661;
+  salt->salt_iter--;
 
-  tc->signature = 0x41524556; // "VERA"
+  vc->pim_multi = 2048;
+  vc->pim_start = 0;
+  vc->pim_stop  = 0;
 
-  digest[0] = tc->data_buf[0];
+  vc->signature = 0x41524556; // "VERA"
+
+  digest[0] = vc->data_buf[0];
 
   return (PARSER_OK);
 }
@@ -270,21 +305,24 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_hash_binary_count        = MODULE_DEFAULT;
   module_ctx->module_hash_binary_parse        = module_hash_binary_parse;
   module_ctx->module_hash_binary_save         = MODULE_DEFAULT;
-  module_ctx->module_hash_decode_outfile      = MODULE_DEFAULT;
+  module_ctx->module_hash_decode_potfile      = MODULE_DEFAULT;
   module_ctx->module_hash_decode_zero_hash    = MODULE_DEFAULT;
   module_ctx->module_hash_decode              = module_hash_decode;
   module_ctx->module_hash_encode_status       = MODULE_DEFAULT;
+  module_ctx->module_hash_encode_potfile      = MODULE_DEFAULT;
   module_ctx->module_hash_encode              = MODULE_DEFAULT;
   module_ctx->module_hash_init_selftest       = module_hash_init_selftest;
   module_ctx->module_hash_mode                = MODULE_DEFAULT;
   module_ctx->module_hash_category            = module_hash_category;
   module_ctx->module_hash_name                = module_hash_name;
+  module_ctx->module_hashes_count_min         = MODULE_DEFAULT;
+  module_ctx->module_hashes_count_max         = MODULE_DEFAULT;
   module_ctx->module_hlfmt_disable            = MODULE_DEFAULT;
   module_ctx->module_hook12                   = MODULE_DEFAULT;
   module_ctx->module_hook23                   = MODULE_DEFAULT;
   module_ctx->module_hook_salt_size           = MODULE_DEFAULT;
   module_ctx->module_hook_size                = MODULE_DEFAULT;
-  module_ctx->module_jit_build_options        = MODULE_DEFAULT;
+  module_ctx->module_jit_build_options        = module_jit_build_options;
   module_ctx->module_jit_cache_disable        = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_max         = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_min         = MODULE_DEFAULT;
@@ -298,6 +336,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_opts_type                = module_opts_type;
   module_ctx->module_outfile_check_disable    = module_outfile_check_disable;
   module_ctx->module_outfile_check_nocomp     = MODULE_DEFAULT;
+  module_ctx->module_potfile_custom_check     = MODULE_DEFAULT;
   module_ctx->module_potfile_disable          = module_potfile_disable;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;

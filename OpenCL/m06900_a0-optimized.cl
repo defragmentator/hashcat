@@ -5,16 +5,17 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
+#endif
 
-__constant u32a c_tables[4][256] =
+CONSTANT_VK u32a c_tables[4][256] =
 {
   {
     0x00072000, 0x00075000, 0x00074800, 0x00071000,
@@ -285,13 +286,13 @@ __constant u32a c_tables[4][256] =
 #if   VECT_SIZE == 1
 #define BOX(i,n,S) (S)[(n)][(i)]
 #elif VECT_SIZE == 2
-#define BOX(i,n,S) (u32x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1])
+#define BOX(i,n,S) make_u32x ((S)[(n)][(i).s0], (S)[(n)][(i).s1])
 #elif VECT_SIZE == 4
-#define BOX(i,n,S) (u32x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3])
+#define BOX(i,n,S) make_u32x ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3])
 #elif VECT_SIZE == 8
-#define BOX(i,n,S) (u32x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3], (S)[(n)][(i).s4], (S)[(n)][(i).s5], (S)[(n)][(i).s6], (S)[(n)][(i).s7])
+#define BOX(i,n,S) make_u32x ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3], (S)[(n)][(i).s4], (S)[(n)][(i).s5], (S)[(n)][(i).s6], (S)[(n)][(i).s7])
 #elif VECT_SIZE == 16
-#define BOX(i,n,S) (u32x) ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3], (S)[(n)][(i).s4], (S)[(n)][(i).s5], (S)[(n)][(i).s6], (S)[(n)][(i).s7], (S)[(n)][(i).s8], (S)[(n)][(i).s9], (S)[(n)][(i).sa], (S)[(n)][(i).sb], (S)[(n)][(i).sc], (S)[(n)][(i).sd], (S)[(n)][(i).se], (S)[(n)][(i).sf])
+#define BOX(i,n,S) make_u32x ((S)[(n)][(i).s0], (S)[(n)][(i).s1], (S)[(n)][(i).s2], (S)[(n)][(i).s3], (S)[(n)][(i).s4], (S)[(n)][(i).s5], (S)[(n)][(i).s6], (S)[(n)][(i).s7], (S)[(n)][(i).s8], (S)[(n)][(i).s9], (S)[(n)][(i).sa], (S)[(n)][(i).sb], (S)[(n)][(i).sc], (S)[(n)][(i).sd], (S)[(n)][(i).se], (S)[(n)][(i).sf])
 #endif
 
 #define _round(k1,k2,tbl)                 \
@@ -697,7 +698,7 @@ __constant u32a c_tables[4][256] =
   R (k, h, s, 6, t);      \
 }
 
-__kernel void m06900_m04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06900_m04 (KERN_ATTR_RULES ())
 {
   /**
    * base
@@ -711,7 +712,7 @@ __kernel void m06900_m04 (KERN_ATTR_RULES ())
    * sbox
    */
 
-  __local u32 s_tables[4][256];
+  LOCAL_VK u32 s_tables[4][256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -721,7 +722,7 @@ __kernel void m06900_m04 (KERN_ATTR_RULES ())
     s_tables[3][i] = c_tables[3][i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -754,7 +755,7 @@ __kernel void m06900_m04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     u32x data[8];
 
@@ -905,15 +906,15 @@ __kernel void m06900_m04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m06900_m08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06900_m08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m06900_m16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06900_m16 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m06900_s04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06900_s04 (KERN_ATTR_RULES ())
 {
   /**
    * base
@@ -927,7 +928,7 @@ __kernel void m06900_s04 (KERN_ATTR_RULES ())
    * sbox
    */
 
-  __local u32 s_tables[4][256];
+  LOCAL_VK u32 s_tables[4][256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -937,7 +938,7 @@ __kernel void m06900_s04 (KERN_ATTR_RULES ())
     s_tables[3][i] = c_tables[3][i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -982,7 +983,7 @@ __kernel void m06900_s04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     /**
      * GOST
@@ -1137,10 +1138,10 @@ __kernel void m06900_s04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m06900_s08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06900_s08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m06900_s16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m06900_s16 (KERN_ATTR_RULES ())
 {
 }

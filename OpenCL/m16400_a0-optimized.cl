@@ -5,16 +5,18 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
+#include "inc_hash_md5.cl"
+#endif
 
-__kernel void m16400_m04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m16400_m04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -55,7 +57,7 @@ __kernel void m16400_m04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     w0[0] = w0[0] ^ 0x5c5c5c5c;
     w0[1] = w0[1] ^ 0x5c5c5c5c;
@@ -153,15 +155,15 @@ __kernel void m16400_m04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m16400_m08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m16400_m08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m16400_m16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m16400_m16 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m16400_s04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m16400_s04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -214,7 +216,7 @@ __kernel void m16400_s04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     w0[0] = w0[0] ^ 0x5c5c5c5c;
     w0[1] = w0[1] ^ 0x5c5c5c5c;
@@ -315,10 +317,10 @@ __kernel void m16400_s04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m16400_s08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m16400_s08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m16400_s16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m16400_s16 (KERN_ATTR_RULES ())
 {
 }

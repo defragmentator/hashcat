@@ -6,15 +6,22 @@
 //not compatible
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha256.cl"
+#endif
+
+typedef struct win8phone
+{
+  u32 salt_buf[32];
+
+} win8phone_t;
 
 DECLSPEC void sha256_transform_transport_vector (const u32x *w, u32x *digest)
 {
@@ -396,7 +403,7 @@ DECLSPEC void memcat64c_be (u32x *block, const u32 offset, u32x *carry)
   }
 }
 
-__kernel void m13800_m04 (KERN_ATTR_RULES_ESALT (win8phone_t))
+KERNEL_FQ void m13800_m04 (KERN_ATTR_RULES_ESALT (win8phone_t))
 {
   /**
    * modifier
@@ -428,14 +435,14 @@ __kernel void m13800_m04 (KERN_ATTR_RULES_ESALT (win8phone_t))
    * shared
    */
 
-  __local u32 s_esalt[32];
+  LOCAL_VK u32 s_esalt[32];
 
   for (u32 i = lid; i < 32; i += lsz)
   {
     s_esalt[i] = esalt_bufs[digests_offset].salt_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -450,7 +457,7 @@ __kernel void m13800_m04 (KERN_ATTR_RULES_ESALT (win8phone_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     const u32x out_len2 = out_len * 2;
 
@@ -459,22 +466,22 @@ __kernel void m13800_m04 (KERN_ATTR_RULES_ESALT (win8phone_t))
 
     u32x w[16];
 
-    w[ 0] = swap32 (w0[0]);
-    w[ 1] = swap32 (w0[1]);
-    w[ 2] = swap32 (w0[2]);
-    w[ 3] = swap32 (w0[3]);
-    w[ 4] = swap32 (w1[0]);
-    w[ 5] = swap32 (w1[1]);
-    w[ 6] = swap32 (w1[2]);
-    w[ 7] = swap32 (w1[3]);
-    w[ 8] = swap32 (w2[0]);
-    w[ 9] = swap32 (w2[1]);
-    w[10] = swap32 (w2[2]);
-    w[11] = swap32 (w2[3]);
-    w[12] = swap32 (w3[0]);
-    w[13] = swap32 (w3[1]);
-    w[14] = swap32 (w3[2]);
-    w[15] = swap32 (w3[3]);
+    w[ 0] = hc_swap32 (w0[0]);
+    w[ 1] = hc_swap32 (w0[1]);
+    w[ 2] = hc_swap32 (w0[2]);
+    w[ 3] = hc_swap32 (w0[3]);
+    w[ 4] = hc_swap32 (w1[0]);
+    w[ 5] = hc_swap32 (w1[1]);
+    w[ 6] = hc_swap32 (w1[2]);
+    w[ 7] = hc_swap32 (w1[3]);
+    w[ 8] = hc_swap32 (w2[0]);
+    w[ 9] = hc_swap32 (w2[1]);
+    w[10] = hc_swap32 (w2[2]);
+    w[11] = hc_swap32 (w2[3]);
+    w[12] = hc_swap32 (w3[0]);
+    w[13] = hc_swap32 (w3[1]);
+    w[14] = hc_swap32 (w3[2]);
+    w[15] = hc_swap32 (w3[3]);
 
     u32x carry[16];
 
@@ -584,15 +591,15 @@ __kernel void m13800_m04 (KERN_ATTR_RULES_ESALT (win8phone_t))
   }
 }
 
-__kernel void m13800_m08 (KERN_ATTR_RULES_ESALT (win8phone_t))
+KERNEL_FQ void m13800_m08 (KERN_ATTR_RULES_ESALT (win8phone_t))
 {
 }
 
-__kernel void m13800_m16 (KERN_ATTR_RULES_ESALT (win8phone_t))
+KERNEL_FQ void m13800_m16 (KERN_ATTR_RULES_ESALT (win8phone_t))
 {
 }
 
-__kernel void m13800_s04 (KERN_ATTR_RULES_ESALT (win8phone_t))
+KERNEL_FQ void m13800_s04 (KERN_ATTR_RULES_ESALT (win8phone_t))
 {
   /**
    * modifier
@@ -624,14 +631,14 @@ __kernel void m13800_s04 (KERN_ATTR_RULES_ESALT (win8phone_t))
    * shared
    */
 
-  __local u32 s_esalt[32];
+  LOCAL_VK u32 s_esalt[32];
 
   for (u32 i = lid; i < 32; i += lsz)
   {
     s_esalt[i] = esalt_bufs[digests_offset].salt_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -658,7 +665,7 @@ __kernel void m13800_s04 (KERN_ATTR_RULES_ESALT (win8phone_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     const u32x out_len2 = out_len * 2;
 
@@ -667,22 +674,22 @@ __kernel void m13800_s04 (KERN_ATTR_RULES_ESALT (win8phone_t))
 
     u32x w[16];
 
-    w[ 0] = swap32 (w0[0]);
-    w[ 1] = swap32 (w0[1]);
-    w[ 2] = swap32 (w0[2]);
-    w[ 3] = swap32 (w0[3]);
-    w[ 4] = swap32 (w1[0]);
-    w[ 5] = swap32 (w1[1]);
-    w[ 6] = swap32 (w1[2]);
-    w[ 7] = swap32 (w1[3]);
-    w[ 8] = swap32 (w2[0]);
-    w[ 9] = swap32 (w2[1]);
-    w[10] = swap32 (w2[2]);
-    w[11] = swap32 (w2[3]);
-    w[12] = swap32 (w3[0]);
-    w[13] = swap32 (w3[1]);
-    w[14] = swap32 (w3[2]);
-    w[15] = swap32 (w3[3]);
+    w[ 0] = hc_swap32 (w0[0]);
+    w[ 1] = hc_swap32 (w0[1]);
+    w[ 2] = hc_swap32 (w0[2]);
+    w[ 3] = hc_swap32 (w0[3]);
+    w[ 4] = hc_swap32 (w1[0]);
+    w[ 5] = hc_swap32 (w1[1]);
+    w[ 6] = hc_swap32 (w1[2]);
+    w[ 7] = hc_swap32 (w1[3]);
+    w[ 8] = hc_swap32 (w2[0]);
+    w[ 9] = hc_swap32 (w2[1]);
+    w[10] = hc_swap32 (w2[2]);
+    w[11] = hc_swap32 (w2[3]);
+    w[12] = hc_swap32 (w3[0]);
+    w[13] = hc_swap32 (w3[1]);
+    w[14] = hc_swap32 (w3[2]);
+    w[15] = hc_swap32 (w3[3]);
 
     u32x carry[16];
 
@@ -792,10 +799,10 @@ __kernel void m13800_s04 (KERN_ATTR_RULES_ESALT (win8phone_t))
   }
 }
 
-__kernel void m13800_s08 (KERN_ATTR_RULES_ESALT (win8phone_t))
+KERNEL_FQ void m13800_s08 (KERN_ATTR_RULES_ESALT (win8phone_t))
 {
 }
 
-__kernel void m13800_s16 (KERN_ATTR_RULES_ESALT (win8phone_t))
+KERNEL_FQ void m13800_s16 (KERN_ATTR_RULES_ESALT (win8phone_t))
 {
 }

@@ -5,20 +5,90 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
+#include "inc_hash_sha1.cl"
 #include "inc_hash_sha256.cl"
+#include "inc_hash_sha512.cl"
+#include "inc_hash_ripemd160.cl"
 #include "inc_cipher_aes.cl"
+#endif
 
+#define LUKS_STRIPES 4000
+
+typedef enum hc_luks_hash_type
+{
+  HC_LUKS_HASH_TYPE_SHA1      = 1,
+  HC_LUKS_HASH_TYPE_SHA256    = 2,
+  HC_LUKS_HASH_TYPE_SHA512    = 3,
+  HC_LUKS_HASH_TYPE_RIPEMD160 = 4,
+  HC_LUKS_HASH_TYPE_WHIRLPOOL = 5,
+
+} hc_luks_hash_type_t;
+
+typedef enum hc_luks_key_size
+{
+  HC_LUKS_KEY_SIZE_128 = 128,
+  HC_LUKS_KEY_SIZE_256 = 256,
+  HC_LUKS_KEY_SIZE_512 = 512,
+
+} hc_luks_key_size_t;
+
+typedef enum hc_luks_cipher_type
+{
+  HC_LUKS_CIPHER_TYPE_AES     = 1,
+  HC_LUKS_CIPHER_TYPE_SERPENT = 2,
+  HC_LUKS_CIPHER_TYPE_TWOFISH = 3,
+
+} hc_luks_cipher_type_t;
+
+typedef enum hc_luks_cipher_mode
+{
+  HC_LUKS_CIPHER_MODE_CBC_ESSIV = 1,
+  HC_LUKS_CIPHER_MODE_CBC_PLAIN = 2,
+  HC_LUKS_CIPHER_MODE_XTS_PLAIN = 3,
+
+} hc_luks_cipher_mode_t;
+
+typedef struct luks
+{
+  int hash_type;    // hc_luks_hash_type_t
+  int key_size;     // hc_luks_key_size_t
+  int cipher_type;  // hc_luks_cipher_type_t
+  int cipher_mode;  // hc_luks_cipher_mode_t
+
+  u32 ct_buf[128];
+
+  u32 af_src_buf[((HC_LUKS_KEY_SIZE_512 / 8) * LUKS_STRIPES) / 4];
+
+} luks_t;
+
+typedef struct luks_tmp
+{
+  u32 ipad32[8];
+  u64 ipad64[8];
+
+  u32 opad32[8];
+  u64 opad64[8];
+
+  u32 dgst32[32];
+  u64 dgst64[16];
+
+  u32 out32[32];
+  u64 out64[16];
+
+} luks_tmp_t;
+
+#ifdef KERNEL_STATIC
 #include "inc_luks_af.cl"
 #include "inc_luks_essiv.cl"
 #include "inc_luks_xts.cl"
-
 #include "inc_luks_aes.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
@@ -67,7 +137,7 @@ DECLSPEC void hmac_sha256_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *i
   sha256_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m14621_init (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
+KERNEL_FQ void m14621_init (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
 {
   /**
    * base
@@ -153,7 +223,7 @@ __kernel void m14621_init (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
   }
 }
 
-__kernel void m14621_loop (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
+KERNEL_FQ void m14621_loop (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -261,7 +331,7 @@ __kernel void m14621_loop (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
   }
 }
 
-__kernel void m14621_comp (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
+KERNEL_FQ void m14621_comp (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -273,17 +343,17 @@ __kernel void m14621_comp (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -300,21 +370,21 @@ __kernel void m14621_comp (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -330,13 +400,13 @@ __kernel void m14621_comp (KERN_ATTR_TMPS_ESALT (luks_tmp_t, luks_t))
 
   // check entropy
 
-  const float entropy = get_entropy (pt_buf, 128);
+  const float entropy = hc_get_entropy (pt_buf, 128);
 
   if (entropy < MAX_ENTROPY)
   {
     if (atomic_inc (&hashes_shown[digests_offset]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 }

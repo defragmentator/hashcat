@@ -5,18 +5,31 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp.h"
 #include "inc_rp.cl"
 #include "inc_scalar.cl"
 #include "inc_hash_md4.cl"
 #include "inc_hash_md5.cl"
+#endif
 
-__kernel void m05600_mxx (KERN_ATTR_RULES_ESALT (netntlm_t))
+typedef struct netntlm
+{
+  u32 user_len;
+  u32 domain_len;
+  u32 srvchall_len;
+  u32 clichall_len;
+
+  u32 userdomain_buf[64];
+  u32 chall_buf[256];
+
+} netntlm_t;
+
+KERNEL_FQ void m05600_mxx (KERN_ATTR_RULES_ESALT (netntlm_t))
 {
   /**
    * modifier
@@ -115,7 +128,7 @@ __kernel void m05600_mxx (KERN_ATTR_RULES_ESALT (netntlm_t))
   }
 }
 
-__kernel void m05600_sxx (KERN_ATTR_RULES_ESALT (netntlm_t))
+KERNEL_FQ void m05600_sxx (KERN_ATTR_RULES_ESALT (netntlm_t))
 {
   /**
    * modifier

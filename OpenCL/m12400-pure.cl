@@ -3,14 +3,24 @@
  * License.....: MIT
  */
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
+
+typedef struct bsdicrypt_tmp
+{
+  u32 Kc[16];
+  u32 Kd[16];
+
+  u32 iv[2];
+
+} bsdicrypt_tmp_t;
 
 #define PERM_OP(a,b,tt,n,m) \
 {                           \
@@ -50,7 +60,7 @@
   PERM_OP (l, r, tt,  4, 0x0f0f0f0f);  \
 }
 
-__constant u32a c_SPtrans[8][64] =
+CONSTANT_VK u32a c_SPtrans[8][64] =
 {
   {
     0x00820200, 0x00020000, 0x80800000, 0x80820200,
@@ -198,7 +208,7 @@ __constant u32a c_SPtrans[8][64] =
   },
 };
 
-__constant u32a c_skb[8][64] =
+CONSTANT_VK u32a c_skb[8][64] =
 {
   {
     0x00000000, 0x00000010, 0x20000000, 0x20000010,
@@ -348,7 +358,7 @@ __constant u32a c_skb[8][64] =
 
 #define BOX(i,n,S) (S)[(n)][(i)]
 
-DECLSPEC void _des_crypt_keysetup (u32 c, u32 d, u32 *Kc, u32 *Kd, __local u32 (*s_skb)[64])
+DECLSPEC void _des_crypt_keysetup (u32 c, u32 d, u32 *Kc, u32 *Kd, LOCAL_AS u32 (*s_skb)[64])
 {
   u32 tt;
 
@@ -417,10 +427,8 @@ DECLSPEC void _des_crypt_keysetup (u32 c, u32 d, u32 *Kc, u32 *Kd, __local u32 (
   }
 }
 
-DECLSPEC void _des_crypt_encrypt (u32 *iv, u32 mask, u32 rounds, u32 *Kc, u32 *Kd, __local u32 (*s_SPtrans)[64])
+DECLSPEC void _des_crypt_encrypt (u32 *iv, u32 mask, u32 rounds, u32 *Kc, u32 *Kd, LOCAL_AS u32 (*s_SPtrans)[64])
 {
-  u32 tt;
-
   const u32 E0 = ((mask >>  0) & 0x003f)
                | ((mask >>  4) & 0x3f00);
   const u32 E1 = ((mask >>  2) & 0x03f0)
@@ -445,7 +453,7 @@ DECLSPEC void _des_crypt_encrypt (u32 *iv, u32 mask, u32 rounds, u32 *Kc, u32 *K
       u = u ^ Kc[j + 0];
       t = t ^ (t << 16);
       t = t ^ r;
-      t = rotl32 (t, 28u);
+      t = hc_rotl32 (t, 28u);
       t = t ^ Kd[j + 0];
 
       l ^= BOX (((u >>  0) & 0x3f), 0, s_SPtrans)
@@ -465,7 +473,7 @@ DECLSPEC void _des_crypt_encrypt (u32 *iv, u32 mask, u32 rounds, u32 *Kc, u32 *K
       u = u ^ Kc[j + 1];
       t = t ^ (t << 16);
       t = t ^ l;
-      t = rotl32 (t, 28u);
+      t = hc_rotl32 (t, 28u);
       t = t ^ Kd[j + 1];
 
       r ^= BOX (((u >>  0) & 0x3f), 0, s_SPtrans)
@@ -489,7 +497,7 @@ DECLSPEC void _des_crypt_encrypt (u32 *iv, u32 mask, u32 rounds, u32 *Kc, u32 *K
   iv[1] = l;
 }
 
-__kernel void m12400_init (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
+KERNEL_FQ void m12400_init (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
 {
   /**
    * base
@@ -503,8 +511,8 @@ __kernel void m12400_init (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
    * sbox
    */
 
-  __local u32 s_SPtrans[8][64];
-  __local u32 s_skb[8][64];
+  LOCAL_VK u32 s_SPtrans[8][64];
+  LOCAL_VK u32 s_skb[8][64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
@@ -527,7 +535,7 @@ __kernel void m12400_init (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
     s_skb[7][i] = c_skb[7][i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -539,7 +547,7 @@ __kernel void m12400_init (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
 
   u32 w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
@@ -560,13 +568,13 @@ __kernel void m12400_init (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
 
     IP (out[0], out[1], tt);
 
-    out[0] = rotr32 (out[0], 31);
-    out[1] = rotr32 (out[1], 31);
+    out[0] = hc_rotr32 (out[0], 31);
+    out[1] = hc_rotr32 (out[1], 31);
 
     _des_crypt_encrypt (out, 0, 1, Kc, Kd, s_SPtrans);
 
-    out[0] = rotl32 (out[0], 31);
-    out[1] = rotl32 (out[1], 31);
+    out[0] = hc_rotl32 (out[0], 31);
+    out[1] = hc_rotl32 (out[1], 31);
 
     FP (out[1], out[0], tt);
 
@@ -625,7 +633,7 @@ __kernel void m12400_init (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
   tmps[gid].iv[1] = 0;
 }
 
-__kernel void m12400_loop (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
+KERNEL_FQ void m12400_loop (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
 {
   /**
    * base
@@ -639,8 +647,8 @@ __kernel void m12400_loop (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
    * sbox
    */
 
-  __local u32 s_SPtrans[8][64];
-  __local u32 s_skb[8][64];
+  LOCAL_VK u32 s_SPtrans[8][64];
+  LOCAL_VK u32 s_skb[8][64];
 
   for (u32 i = lid; i < 64; i += lsz)
   {
@@ -663,7 +671,7 @@ __kernel void m12400_loop (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
     s_skb[7][i] = c_skb[7][i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -756,7 +764,7 @@ __kernel void m12400_loop (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
   tmps[gid].iv[1] = iv[1];
 }
 
-__kernel void m12400_comp (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
+KERNEL_FQ void m12400_comp (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
 {
   /**
    * base
@@ -775,5 +783,7 @@ __kernel void m12400_comp (KERN_ATTR_TMPS (bsdicrypt_tmp_t))
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

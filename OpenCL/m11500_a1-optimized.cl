@@ -6,14 +6,15 @@
 //incompatible because of branches
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
+#endif
 
-__constant u32a crc32tab[0x100] =
+CONSTANT_VK u32a crc32tab[0x100] =
 {
   0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
   0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
@@ -88,15 +89,15 @@ DECLSPEC u32x round_crc32 (u32x a, const u32x v)
   const u32x s = a >> 8;
 
   #if   VECT_SIZE == 1
-  a = (u32x) crc32tab[k];
+  a = make_u32x crc32tab[k];
   #elif VECT_SIZE == 2
-  a = (u32x) (crc32tab[k.s0], crc32tab[k.s1]);
+  a = make_u32x (crc32tab[k.s0], crc32tab[k.s1]);
   #elif VECT_SIZE == 4
-  a = (u32x) (crc32tab[k.s0], crc32tab[k.s1], crc32tab[k.s2], crc32tab[k.s3]);
+  a = make_u32x (crc32tab[k.s0], crc32tab[k.s1], crc32tab[k.s2], crc32tab[k.s3]);
   #elif VECT_SIZE == 8
-  a = (u32x) (crc32tab[k.s0], crc32tab[k.s1], crc32tab[k.s2], crc32tab[k.s3], crc32tab[k.s4], crc32tab[k.s5], crc32tab[k.s6], crc32tab[k.s7]);
+  a = make_u32x (crc32tab[k.s0], crc32tab[k.s1], crc32tab[k.s2], crc32tab[k.s3], crc32tab[k.s4], crc32tab[k.s5], crc32tab[k.s6], crc32tab[k.s7]);
   #elif VECT_SIZE == 16
-  a = (u32x) (crc32tab[k.s0], crc32tab[k.s1], crc32tab[k.s2], crc32tab[k.s3], crc32tab[k.s4], crc32tab[k.s5], crc32tab[k.s6], crc32tab[k.s7], crc32tab[k.s8], crc32tab[k.s9], crc32tab[k.sa], crc32tab[k.sb], crc32tab[k.sc], crc32tab[k.sd], crc32tab[k.se], crc32tab[k.sf]);
+  a = make_u32x (crc32tab[k.s0], crc32tab[k.s1], crc32tab[k.s2], crc32tab[k.s3], crc32tab[k.s4], crc32tab[k.s5], crc32tab[k.s6], crc32tab[k.s7], crc32tab[k.s8], crc32tab[k.s9], crc32tab[k.sa], crc32tab[k.sb], crc32tab[k.sc], crc32tab[k.sd], crc32tab[k.se], crc32tab[k.sf]);
   #endif
 
   a ^= s;
@@ -112,8 +113,16 @@ DECLSPEC u32x crc32 (const u32x *w, const u32 pw_len, const u32 iv)
   if (pw_len >=  2) a = round_crc32 (a, w[0] >>  8);
   if (pw_len >=  3) a = round_crc32 (a, w[0] >> 16);
   if (pw_len >=  4) a = round_crc32 (a, w[0] >> 24);
+  if (pw_len >=  5) a = round_crc32 (a, w[1] >>  0);
+  if (pw_len >=  6) a = round_crc32 (a, w[1] >>  8);
+  if (pw_len >=  7) a = round_crc32 (a, w[1] >> 16);
+  if (pw_len >=  8) a = round_crc32 (a, w[1] >> 24);
+  if (pw_len >=  9) a = round_crc32 (a, w[2] >>  0);
+  if (pw_len >= 10) a = round_crc32 (a, w[2] >>  8);
+  if (pw_len >= 11) a = round_crc32 (a, w[2] >> 16);
+  if (pw_len >= 12) a = round_crc32 (a, w[2] >> 24);
 
-  for (u32 i = 4, j = 1; i < pw_len; i += 4, j += 1)
+  for (u32 i = 12, j = 3; i < pw_len; i += 4, j += 1)
   {
     if (pw_len >= (i + 1)) a = round_crc32 (a, w[j] >>  0);
     if (pw_len >= (i + 2)) a = round_crc32 (a, w[j] >>  8);
@@ -124,7 +133,7 @@ DECLSPEC u32x crc32 (const u32x *w, const u32 pw_len, const u32 iv)
   return ~a;
 }
 
-__kernel void m11500_m04 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m11500_m04 (KERN_ATTR_BASIC ())
 {
   /**
    * modifier
@@ -264,15 +273,15 @@ __kernel void m11500_m04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m11500_m08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m11500_m08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m11500_m16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m11500_m16 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m11500_s04 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m11500_s04 (KERN_ATTR_BASIC ())
 {
   /**
    * modifier
@@ -424,10 +433,10 @@ __kernel void m11500_s04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m11500_s08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m11500_s08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m11500_s16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m11500_s16 (KERN_ATTR_BASIC ())
 {
 }

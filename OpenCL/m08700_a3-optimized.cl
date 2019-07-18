@@ -5,14 +5,15 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
+#endif
 
-__constant u32a lotus_magic_table[256] =
+CONSTANT_VK u32a lotus_magic_table[256] =
 {
   0xbd, 0x56, 0xea, 0xf2, 0xa2, 0xf1, 0xac, 0x2a,
   0xb0, 0x93, 0xd1, 0x9c, 0x1b, 0x33, 0xfd, 0xd0,
@@ -51,30 +52,30 @@ __constant u32a lotus_magic_table[256] =
 #define BOX(S,i) (S)[(i)]
 
 #if   VECT_SIZE == 1
-#define uint_to_hex_upper8(i) (u32x) (l_bin2asc[(i)])
+#define uint_to_hex_upper8(i) make_u32x (l_bin2asc[(i)])
 #elif VECT_SIZE == 2
-#define uint_to_hex_upper8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
+#define uint_to_hex_upper8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
 #elif VECT_SIZE == 4
-#define uint_to_hex_upper8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
+#define uint_to_hex_upper8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
 #elif VECT_SIZE == 8
-#define uint_to_hex_upper8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
+#define uint_to_hex_upper8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
 #elif VECT_SIZE == 16
-#define uint_to_hex_upper8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
+#define uint_to_hex_upper8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
 #endif
 
 #if   VECT_SIZE == 1
 #define BOX1(S,i) (S)[(i)]
 #elif VECT_SIZE == 2
-#define BOX1(S,i) (u32x) ((S)[(i).s0], (S)[(i).s1])
+#define BOX1(S,i) make_u32x ((S)[(i).s0], (S)[(i).s1])
 #elif VECT_SIZE == 4
-#define BOX1(S,i) (u32x) ((S)[(i).s0], (S)[(i).s1], (S)[(i).s2], (S)[(i).s3])
+#define BOX1(S,i) make_u32x ((S)[(i).s0], (S)[(i).s1], (S)[(i).s2], (S)[(i).s3])
 #elif VECT_SIZE == 8
-#define BOX1(S,i) (u32x) ((S)[(i).s0], (S)[(i).s1], (S)[(i).s2], (S)[(i).s3], (S)[(i).s4], (S)[(i).s5], (S)[(i).s6], (S)[(i).s7])
+#define BOX1(S,i) make_u32x ((S)[(i).s0], (S)[(i).s1], (S)[(i).s2], (S)[(i).s3], (S)[(i).s4], (S)[(i).s5], (S)[(i).s6], (S)[(i).s7])
 #elif VECT_SIZE == 16
-#define BOX1(S,i) (u32x) ((S)[(i).s0], (S)[(i).s1], (S)[(i).s2], (S)[(i).s3], (S)[(i).s4], (S)[(i).s5], (S)[(i).s6], (S)[(i).s7], (S)[(i).s8], (S)[(i).s9], (S)[(i).sa], (S)[(i).sb], (S)[(i).sc], (S)[(i).sd], (S)[(i).se], (S)[(i).sf])
+#define BOX1(S,i) make_u32x ((S)[(i).s0], (S)[(i).s1], (S)[(i).s2], (S)[(i).s3], (S)[(i).s4], (S)[(i).s5], (S)[(i).s6], (S)[(i).s7], (S)[(i).s8], (S)[(i).s9], (S)[(i).sa], (S)[(i).sb], (S)[(i).sc], (S)[(i).sd], (S)[(i).se], (S)[(i).sf])
 #endif
 
-DECLSPEC void lotus_mix (u32x *in, __local u32 *s_lotus_magic_table)
+DECLSPEC void lotus_mix (u32x *in, LOCAL_AS u32 *s_lotus_magic_table)
 {
   u32x p = 0;
 
@@ -97,7 +98,7 @@ DECLSPEC void lotus_mix (u32x *in, __local u32 *s_lotus_magic_table)
   }
 }
 
-DECLSPEC void lotus_transform_password (u32x *in, u32x *out, __local u32 *s_lotus_magic_table)
+DECLSPEC void lotus_transform_password (u32x *in, u32x *out, LOCAL_AS u32 *s_lotus_magic_table)
 {
   u32x t = out[3] >> 24;
 
@@ -194,7 +195,7 @@ DECLSPEC void pad (u32 *w, const u32 len)
   }
 }
 
-DECLSPEC void mdtransform_norecalc (u32x *state, u32x *block, __local u32 *s_lotus_magic_table)
+DECLSPEC void mdtransform_norecalc (u32x *state, u32x *block, LOCAL_AS u32 *s_lotus_magic_table)
 {
   u32x x[12];
 
@@ -219,14 +220,14 @@ DECLSPEC void mdtransform_norecalc (u32x *state, u32x *block, __local u32 *s_lot
   state[3] = x[3];
 }
 
-DECLSPEC void mdtransform (u32x *state, u32x *checksum, u32x *block, __local u32 *s_lotus_magic_table)
+DECLSPEC void mdtransform (u32x *state, u32x *checksum, u32x *block, LOCAL_AS u32 *s_lotus_magic_table)
 {
   mdtransform_norecalc (state, block, s_lotus_magic_table);
 
   lotus_transform_password (block, checksum, s_lotus_magic_table);
 }
 
-DECLSPEC void domino_big_md (const u32x *saved_key, const u32 size, u32x *state, __local u32 *s_lotus_magic_table)
+DECLSPEC void domino_big_md (const u32x *saved_key, const u32 size, u32x *state, LOCAL_AS u32 *s_lotus_magic_table)
 {
   u32x checksum[4];
 
@@ -265,7 +266,7 @@ DECLSPEC void domino_big_md (const u32x *saved_key, const u32 size, u32x *state,
   mdtransform_norecalc (state, checksum, s_lotus_magic_table);
 }
 
-DECLSPEC void m08700m (__local u32 *s_lotus_magic_table, __local u32 *l_bin2asc, u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
+DECLSPEC void m08700m (LOCAL_AS u32 *s_lotus_magic_table, LOCAL_AS u32 *l_bin2asc, u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
 {
   /**
    * modifier
@@ -398,7 +399,7 @@ DECLSPEC void m08700m (__local u32 *s_lotus_magic_table, __local u32 *l_bin2asc,
   }
 }
 
-DECLSPEC void m08700s (__local u32 *s_lotus_magic_table, __local u32 *l_bin2asc, u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
+DECLSPEC void m08700s (LOCAL_AS u32 *s_lotus_magic_table, LOCAL_AS u32 *l_bin2asc, u32 *w, const u32 pw_len, KERN_ATTR_VECTOR ())
 {
   /**
    * modifier
@@ -543,7 +544,7 @@ DECLSPEC void m08700s (__local u32 *s_lotus_magic_table, __local u32 *l_bin2asc,
   }
 }
 
-__kernel void m08700_m04 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m08700_m04 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -557,14 +558,14 @@ __kernel void m08700_m04 (KERN_ATTR_VECTOR ())
    * sbox
    */
 
-  __local u32 s_lotus_magic_table[256];
+  LOCAL_VK u32 s_lotus_magic_table[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_lotus_magic_table[i] = lotus_magic_table[i];
   }
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -575,7 +576,7 @@ __kernel void m08700_m04 (KERN_ATTR_VECTOR ())
                  | ((i1 < 10) ? '0' + i1 : 'A' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -611,7 +612,7 @@ __kernel void m08700_m04 (KERN_ATTR_VECTOR ())
   m08700m (s_lotus_magic_table, l_bin2asc, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m08700_m08 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m08700_m08 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -625,14 +626,14 @@ __kernel void m08700_m08 (KERN_ATTR_VECTOR ())
    * sbox
    */
 
-  __local u32 s_lotus_magic_table[256];
+  LOCAL_VK u32 s_lotus_magic_table[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_lotus_magic_table[i] = lotus_magic_table[i];
   }
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -643,7 +644,7 @@ __kernel void m08700_m08 (KERN_ATTR_VECTOR ())
                  | ((i1 < 10) ? '0' + i1 : 'A' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -679,7 +680,7 @@ __kernel void m08700_m08 (KERN_ATTR_VECTOR ())
   m08700m (s_lotus_magic_table, l_bin2asc, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m08700_m16 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m08700_m16 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -693,14 +694,14 @@ __kernel void m08700_m16 (KERN_ATTR_VECTOR ())
    * sbox
    */
 
-  __local u32 s_lotus_magic_table[256];
+  LOCAL_VK u32 s_lotus_magic_table[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_lotus_magic_table[i] = lotus_magic_table[i];
   }
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -711,7 +712,7 @@ __kernel void m08700_m16 (KERN_ATTR_VECTOR ())
                  | ((i1 < 10) ? '0' + i1 : 'A' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -747,7 +748,7 @@ __kernel void m08700_m16 (KERN_ATTR_VECTOR ())
   m08700m (s_lotus_magic_table, l_bin2asc, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m08700_s04 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m08700_s04 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -761,14 +762,14 @@ __kernel void m08700_s04 (KERN_ATTR_VECTOR ())
    * sbox
    */
 
-  __local u32 s_lotus_magic_table[256];
+  LOCAL_VK u32 s_lotus_magic_table[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_lotus_magic_table[i] = lotus_magic_table[i];
   }
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -779,7 +780,7 @@ __kernel void m08700_s04 (KERN_ATTR_VECTOR ())
                  | ((i1 < 10) ? '0' + i1 : 'A' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -815,7 +816,7 @@ __kernel void m08700_s04 (KERN_ATTR_VECTOR ())
   m08700s (s_lotus_magic_table, l_bin2asc, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m08700_s08 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m08700_s08 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -829,14 +830,14 @@ __kernel void m08700_s08 (KERN_ATTR_VECTOR ())
    * sbox
    */
 
-  __local u32 s_lotus_magic_table[256];
+  LOCAL_VK u32 s_lotus_magic_table[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_lotus_magic_table[i] = lotus_magic_table[i];
   }
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -847,7 +848,7 @@ __kernel void m08700_s08 (KERN_ATTR_VECTOR ())
                  | ((i1 < 10) ? '0' + i1 : 'A' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -883,7 +884,7 @@ __kernel void m08700_s08 (KERN_ATTR_VECTOR ())
   m08700s (s_lotus_magic_table, l_bin2asc, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, bitmap_mask, bitmap_shift1, bitmap_shift2, salt_pos, loop_pos, loop_cnt, il_cnt, digests_cnt, digests_offset, combs_mode, gid_max);
 }
 
-__kernel void m08700_s16 (KERN_ATTR_VECTOR ())
+KERNEL_FQ void m08700_s16 (KERN_ATTR_VECTOR ())
 {
   /**
    * base
@@ -897,14 +898,14 @@ __kernel void m08700_s16 (KERN_ATTR_VECTOR ())
    * sbox
    */
 
-  __local u32 s_lotus_magic_table[256];
+  LOCAL_VK u32 s_lotus_magic_table[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_lotus_magic_table[i] = lotus_magic_table[i];
   }
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -915,7 +916,7 @@ __kernel void m08700_s16 (KERN_ATTR_VECTOR ())
                  | ((i1 < 10) ? '0' + i1 : 'A' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 

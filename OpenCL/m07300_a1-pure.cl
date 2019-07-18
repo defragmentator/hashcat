@@ -5,15 +5,23 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_scalar.cl"
 #include "inc_hash_sha1.cl"
+#endif
 
-__kernel void m07300_mxx (KERN_ATTR_ESALT (rakp_t))
+typedef struct rakp
+{
+  u32 salt_buf[128];
+  u32 salt_len;
+
+} rakp_t;
+
+KERNEL_FQ void m07300_mxx (KERN_ATTR_ESALT (rakp_t))
 {
   /**
    * modifier
@@ -32,9 +40,9 @@ __kernel void m07300_mxx (KERN_ATTR_ESALT (rakp_t))
 
   u32 w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
-    w[idx] = swap32_S (pws[gid].i[idx]);
+    w[idx] = hc_swap32_S (pws[gid].i[idx]);
   }
 
   /**
@@ -52,7 +60,7 @@ __kernel void m07300_mxx (KERN_ATTR_ESALT (rakp_t))
     #endif
     for (int idx = 0; idx < 64; idx++)
     {
-      c[idx] = swap32_S (combs_buf[il_pos].i[idx]);
+      c[idx] = hc_swap32_S (combs_buf[il_pos].i[idx]);
     }
 
     switch_buffer_by_offset_1x64_be_S (c, pw_len);
@@ -82,7 +90,7 @@ __kernel void m07300_mxx (KERN_ATTR_ESALT (rakp_t))
   }
 }
 
-__kernel void m07300_sxx (KERN_ATTR_ESALT (rakp_t))
+KERNEL_FQ void m07300_sxx (KERN_ATTR_ESALT (rakp_t))
 {
   /**
    * modifier
@@ -113,9 +121,9 @@ __kernel void m07300_sxx (KERN_ATTR_ESALT (rakp_t))
 
   u32 w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
-    w[idx] = swap32_S (pws[gid].i[idx]);
+    w[idx] = hc_swap32_S (pws[gid].i[idx]);
   }
 
   /**
@@ -133,7 +141,7 @@ __kernel void m07300_sxx (KERN_ATTR_ESALT (rakp_t))
     #endif
     for (int idx = 0; idx < 64; idx++)
     {
-      c[idx] = swap32_S (combs_buf[il_pos].i[idx]);
+      c[idx] = hc_swap32_S (combs_buf[il_pos].i[idx]);
     }
 
     switch_buffer_by_offset_1x64_be_S (c, pw_len);

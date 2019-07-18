@@ -6,15 +6,25 @@
 //too much register pressure
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha1.cl"
+#endif
+
+typedef struct oldoffice34
+{
+  u32 version;
+  u32 encryptedVerifier[4];
+  u32 encryptedVerifierHash[5];
+  u32 rc4key[2];
+
+} oldoffice34_t;
 
 typedef struct
 {
@@ -24,7 +34,7 @@ typedef struct
 
 } RC4_KEY;
 
-DECLSPEC void swap (__local RC4_KEY *rc4_key, const u8 i, const u8 j)
+DECLSPEC void swap (LOCAL_AS RC4_KEY *rc4_key, const u8 i, const u8 j)
 {
   u8 tmp;
 
@@ -33,12 +43,12 @@ DECLSPEC void swap (__local RC4_KEY *rc4_key, const u8 i, const u8 j)
   rc4_key->S[j] = tmp;
 }
 
-DECLSPEC void rc4_init_16 (__local RC4_KEY *rc4_key, const u32 *data)
+DECLSPEC void rc4_init_16 (LOCAL_AS RC4_KEY *rc4_key, const u32 *data)
 {
   u32 v = 0x03020100;
   u32 a = 0x04040404;
 
-  __local u32 *ptr = (__local u32 *) rc4_key->S;
+  LOCAL_AS u32 *ptr = (LOCAL_AS u32 *) rc4_key->S;
 
   #ifdef _unroll
   #pragma unroll
@@ -86,7 +96,7 @@ DECLSPEC void rc4_init_16 (__local RC4_KEY *rc4_key, const u32 *data)
   }
 }
 
-DECLSPEC u8 rc4_next_16 (__local RC4_KEY *rc4_key, u8 i, u8 j, const u32 *in, u32 *out)
+DECLSPEC u8 rc4_next_16 (LOCAL_AS RC4_KEY *rc4_key, u8 i, u8 j, const u32 *in, u32 *out)
 {
   #ifdef _unroll
   #pragma unroll
@@ -139,7 +149,7 @@ DECLSPEC u8 rc4_next_16 (__local RC4_KEY *rc4_key, u8 i, u8 j, const u32 *in, u3
   return j;
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
+KERNEL_FQ void m09800_m04 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
 {
   /**
    * modifier
@@ -173,9 +183,9 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_A
    * shared
    */
 
-  __local RC4_KEY rc4_keys[64];
+  LOCAL_VK RC4_KEY rc4_keys[64];
 
-  __local RC4_KEY *rc4_key = &rc4_keys[lid];
+  LOCAL_AS RC4_KEY *rc4_key = &rc4_keys[lid];
 
   /**
    * salt
@@ -212,7 +222,7 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_A
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x80_2x4_VV (w0, w1, out_len);
 
@@ -227,16 +237,16 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_A
 
     w3[3] = pw_salt_len * 8;
     w3[2] = 0;
-    w3[1] = swap32 (w2[1]);
-    w3[0] = swap32 (w2[0]);
-    w2[3] = swap32 (w1[3]);
-    w2[2] = swap32 (w1[2]);
-    w2[1] = swap32 (w1[1]);
-    w2[0] = swap32 (w1[0]);
-    w1[3] = swap32 (w0[3]);
-    w1[2] = swap32 (w0[2]);
-    w1[1] = swap32 (w0[1]);
-    w1[0] = swap32 (w0[0]);
+    w3[1] = hc_swap32 (w2[1]);
+    w3[0] = hc_swap32 (w2[0]);
+    w2[3] = hc_swap32 (w1[3]);
+    w2[2] = hc_swap32 (w1[2]);
+    w2[1] = hc_swap32 (w1[1]);
+    w2[0] = hc_swap32 (w1[0]);
+    w1[3] = hc_swap32 (w0[3]);
+    w1[2] = hc_swap32 (w0[2]);
+    w1[1] = hc_swap32 (w0[1]);
+    w1[0] = hc_swap32 (w0[0]);
     w0[3] = salt_buf[3];
     w0[2] = salt_buf[2];
     w0[1] = salt_buf[1];
@@ -277,10 +287,10 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_A
 
     sha1_transform (w0, w1, w2, w3, digest);
 
-    digest[0] = swap32_S (digest[0]);
-    digest[1] = swap32_S (digest[1]);
-    digest[2] = swap32_S (digest[2]);
-    digest[3] = swap32_S (digest[3]);
+    digest[0] = hc_swap32_S (digest[0]);
+    digest[1] = hc_swap32_S (digest[1]);
+    digest[2] = hc_swap32_S (digest[2]);
+    digest[3] = hc_swap32_S (digest[3]);
 
     if (version == 3)
     {
@@ -295,10 +305,10 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_A
 
     u8 j = rc4_next_16 (rc4_key, 0, 0, encryptedVerifier, out);
 
-    w0[0] = swap32 (out[0]);
-    w0[1] = swap32 (out[1]);
-    w0[2] = swap32 (out[2]);
-    w0[3] = swap32 (out[3]);
+    w0[0] = hc_swap32 (out[0]);
+    w0[1] = hc_swap32 (out[1]);
+    w0[2] = hc_swap32 (out[2]);
+    w0[3] = hc_swap32 (out[3]);
     w1[0] = 0x80000000;
     w1[1] = 0;
     w1[2] = 0;
@@ -320,10 +330,10 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_A
 
     sha1_transform (w0, w1, w2, w3, digest);
 
-    digest[0] = swap32_S (digest[0]);
-    digest[1] = swap32_S (digest[1]);
-    digest[2] = swap32_S (digest[2]);
-    digest[3] = swap32_S (digest[3]);
+    digest[0] = hc_swap32_S (digest[0]);
+    digest[1] = hc_swap32_S (digest[1]);
+    digest[2] = hc_swap32_S (digest[2]);
+    digest[3] = hc_swap32_S (digest[3]);
 
     rc4_next_16 (rc4_key, 16, j, digest, out);
 
@@ -331,15 +341,15 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m04 (KERN_A
   }
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m08 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
+KERNEL_FQ void m09800_m08 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
 {
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_m16 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
+KERNEL_FQ void m09800_m16 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
 {
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
+KERNEL_FQ void m09800_s04 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
 {
   /**
    * modifier
@@ -373,9 +383,9 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_A
    * shared
    */
 
-  __local RC4_KEY rc4_keys[64];
+  LOCAL_VK RC4_KEY rc4_keys[64];
 
-  __local RC4_KEY *rc4_key = &rc4_keys[lid];
+  LOCAL_AS RC4_KEY *rc4_key = &rc4_keys[lid];
 
   /**
    * salt
@@ -424,7 +434,7 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_A
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x80_2x4_VV (w0, w1, out_len);
 
@@ -439,16 +449,16 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_A
 
     w3[3] = pw_salt_len * 8;
     w3[2] = 0;
-    w3[1] = swap32 (w2[1]);
-    w3[0] = swap32 (w2[0]);
-    w2[3] = swap32 (w1[3]);
-    w2[2] = swap32 (w1[2]);
-    w2[1] = swap32 (w1[1]);
-    w2[0] = swap32 (w1[0]);
-    w1[3] = swap32 (w0[3]);
-    w1[2] = swap32 (w0[2]);
-    w1[1] = swap32 (w0[1]);
-    w1[0] = swap32 (w0[0]);
+    w3[1] = hc_swap32 (w2[1]);
+    w3[0] = hc_swap32 (w2[0]);
+    w2[3] = hc_swap32 (w1[3]);
+    w2[2] = hc_swap32 (w1[2]);
+    w2[1] = hc_swap32 (w1[1]);
+    w2[0] = hc_swap32 (w1[0]);
+    w1[3] = hc_swap32 (w0[3]);
+    w1[2] = hc_swap32 (w0[2]);
+    w1[1] = hc_swap32 (w0[1]);
+    w1[0] = hc_swap32 (w0[0]);
     w0[3] = salt_buf[3];
     w0[2] = salt_buf[2];
     w0[1] = salt_buf[1];
@@ -489,10 +499,10 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_A
 
     sha1_transform (w0, w1, w2, w3, digest);
 
-    digest[0] = swap32_S (digest[0]);
-    digest[1] = swap32_S (digest[1]);
-    digest[2] = swap32_S (digest[2]);
-    digest[3] = swap32_S (digest[3]);
+    digest[0] = hc_swap32_S (digest[0]);
+    digest[1] = hc_swap32_S (digest[1]);
+    digest[2] = hc_swap32_S (digest[2]);
+    digest[3] = hc_swap32_S (digest[3]);
 
     if (version == 3)
     {
@@ -507,10 +517,10 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_A
 
     u8 j = rc4_next_16 (rc4_key, 0, 0, encryptedVerifier, out);
 
-    w0[0] = swap32 (out[0]);
-    w0[1] = swap32 (out[1]);
-    w0[2] = swap32 (out[2]);
-    w0[3] = swap32 (out[3]);
+    w0[0] = hc_swap32 (out[0]);
+    w0[1] = hc_swap32 (out[1]);
+    w0[2] = hc_swap32 (out[2]);
+    w0[3] = hc_swap32 (out[3]);
     w1[0] = 0x80000000;
     w1[1] = 0;
     w1[2] = 0;
@@ -532,10 +542,10 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_A
 
     sha1_transform (w0, w1, w2, w3, digest);
 
-    digest[0] = swap32_S (digest[0]);
-    digest[1] = swap32_S (digest[1]);
-    digest[2] = swap32_S (digest[2]);
-    digest[3] = swap32_S (digest[3]);
+    digest[0] = hc_swap32_S (digest[0]);
+    digest[1] = hc_swap32_S (digest[1]);
+    digest[2] = hc_swap32_S (digest[2]);
+    digest[3] = hc_swap32_S (digest[3]);
 
     rc4_next_16 (rc4_key, 16, j, digest, out);
 
@@ -543,10 +553,10 @@ __kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s04 (KERN_A
   }
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s08 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
+KERNEL_FQ void m09800_s08 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
 {
 }
 
-__kernel void __attribute__((reqd_work_group_size(64, 1, 1))) m09800_s16 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
+KERNEL_FQ void m09800_s16 (KERN_ATTR_RULES_ESALT (oldoffice34_t))
 {
 }

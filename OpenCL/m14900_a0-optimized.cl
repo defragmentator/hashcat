@@ -6,16 +6,17 @@
 //too much register pressure
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
+#endif
 
-__constant u8a c_ftable[256] =
+CONSTANT_VK u8a c_ftable[256] =
 {
   0xa3, 0xd7, 0x09, 0x83, 0xf8, 0x48, 0xf6, 0xf4,
   0xb3, 0x21, 0x15, 0x78, 0x99, 0xb1, 0xaf, 0xf9,
@@ -51,7 +52,7 @@ __constant u8a c_ftable[256] =
   0xbd, 0xa8, 0x3a, 0x01, 0x05, 0x59, 0x2a, 0x46
 };
 
-DECLSPEC void g (__local u8 *s_ftable, const u32 *key, const int k, const u32 *wx, u32 *out)
+DECLSPEC void g (LOCAL_AS u8 *s_ftable, const u32 *key, const int k, const u32 *wx, u32 *out)
 {
   const u32 g1 = wx[1];
   const u32 g2 = wx[0];
@@ -64,7 +65,7 @@ DECLSPEC void g (__local u8 *s_ftable, const u32 *key, const int k, const u32 *w
   out[1] = g5;
 }
 
-DECLSPEC u32 skip32 (__local u8 *s_ftable, const u32 KP, const u32 *key)
+DECLSPEC u32 skip32 (LOCAL_AS u8 *s_ftable, const u32 KP, const u32 *key)
 {
   u32 wl[2];
   u32 wr[2];
@@ -104,7 +105,7 @@ DECLSPEC u32 skip32 (__local u8 *s_ftable, const u32 KP, const u32 *key)
   return r;
 }
 
-__kernel void m14900_m04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m14900_m04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -118,14 +119,14 @@ __kernel void m14900_m04 (KERN_ATTR_RULES ())
    * s_ftable
    */
 
-  __local u8 s_ftable[256];
+  LOCAL_VK u8 s_ftable[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_ftable[i] = c_ftable[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -164,7 +165,7 @@ __kernel void m14900_m04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     u32 key[10];
 
@@ -187,15 +188,15 @@ __kernel void m14900_m04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m14900_m08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m14900_m08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m14900_m16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m14900_m16 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m14900_s04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m14900_s04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -209,14 +210,14 @@ __kernel void m14900_s04 (KERN_ATTR_RULES ())
    * s_ftable
    */
 
-  __local u8 s_ftable[256];
+  LOCAL_VK u8 s_ftable[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_ftable[i] = c_ftable[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -267,7 +268,7 @@ __kernel void m14900_s04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     u32 key[10];
 
@@ -290,10 +291,10 @@ __kernel void m14900_s04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m14900_s08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m14900_s08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m14900_s16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m14900_s16 (KERN_ATTR_RULES ())
 {
 }

@@ -5,17 +5,27 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp.h"
 #include "inc_rp.cl"
 #include "inc_scalar.cl"
 #include "inc_hash_sha512.cl"
+#endif
 
-__kernel void m16513_mxx (KERN_ATTR_RULES_ESALT (jwt_t))
+typedef struct jwt
+{
+  u32 salt_buf[1024];
+  u32 salt_len;
+
+  u32 signature_len;
+
+} jwt_t;
+
+KERNEL_FQ void m16513_mxx (KERN_ATTR_RULES_ESALT (jwt_t))
 {
   /**
    * modifier
@@ -59,7 +69,7 @@ __kernel void m16513_mxx (KERN_ATTR_RULES_ESALT (jwt_t))
   }
 }
 
-__kernel void m16513_sxx (KERN_ATTR_RULES_ESALT (jwt_t))
+KERNEL_FQ void m16513_sxx (KERN_ATTR_RULES_ESALT (jwt_t))
 {
   /**
    * modifier

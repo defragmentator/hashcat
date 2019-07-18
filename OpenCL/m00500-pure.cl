@@ -5,19 +5,26 @@
 
 //#define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_hash_md5.cl"
+#endif
 
 #define COMPARE_S "inc_comp_single.cl"
 #define COMPARE_M "inc_comp_multi.cl"
 
+typedef struct md5crypt_tmp
+{
+  u32 digest_buf[4];
+
+} md5crypt_tmp_t;
+
 #define md5crypt_magic 0x00243124u
 
-__kernel void m00500_init (KERN_ATTR_TMPS (md5crypt_tmp_t))
+KERNEL_FQ void m00500_init (KERN_ATTR_TMPS (md5crypt_tmp_t))
 {
   /**
    * base
@@ -35,7 +42,7 @@ __kernel void m00500_init (KERN_ATTR_TMPS (md5crypt_tmp_t))
 
   u32 w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
@@ -44,7 +51,7 @@ __kernel void m00500_init (KERN_ATTR_TMPS (md5crypt_tmp_t))
 
   u32 s[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
   {
     s[idx] = salt_bufs[salt_pos].salt_buf[idx];
   }
@@ -123,7 +130,7 @@ __kernel void m00500_init (KERN_ATTR_TMPS (md5crypt_tmp_t))
   tmps[gid].digest_buf[3] = md5_ctx.h[3];
 }
 
-__kernel void m00500_loop (KERN_ATTR_TMPS (md5crypt_tmp_t))
+KERNEL_FQ void m00500_loop (KERN_ATTR_TMPS (md5crypt_tmp_t))
 {
   /**
    * base
@@ -141,7 +148,7 @@ __kernel void m00500_loop (KERN_ATTR_TMPS (md5crypt_tmp_t))
 
   u32 w[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
   {
     w[idx] = pws[gid].i[idx];
   }
@@ -150,7 +157,7 @@ __kernel void m00500_loop (KERN_ATTR_TMPS (md5crypt_tmp_t))
 
   u32 s[64] = { 0 };
 
-  for (int i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
+  for (u32 i = 0, idx = 0; i < salt_len; i += 4, idx += 1)
   {
     s[idx] = salt_bufs[salt_pos].salt_buf[idx];
   }
@@ -218,7 +225,7 @@ __kernel void m00500_loop (KERN_ATTR_TMPS (md5crypt_tmp_t))
   tmps[gid].digest_buf[3] = digest[3];
 }
 
-__kernel void m00500_comp (KERN_ATTR_TMPS (md5crypt_tmp_t))
+KERNEL_FQ void m00500_comp (KERN_ATTR_TMPS (md5crypt_tmp_t))
 {
   /**
    * modifier
@@ -241,5 +248,7 @@ __kernel void m00500_comp (KERN_ATTR_TMPS (md5crypt_tmp_t))
 
   #define il_pos 0
 
+  #ifdef KERNEL_STATIC
   #include COMPARE_M
+  #endif
 }

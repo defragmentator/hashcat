@@ -17,7 +17,6 @@
 #include "terminal.h"
 #include "thread.h"
 #include "status.h"
-#include "interface.h"
 #include "shared.h"
 #include "event.h"
 
@@ -35,10 +34,7 @@ static void main_log_clear_line (MAYBE_UNUSED const size_t prev_len, MAYBE_UNUSE
 
   fputc ('\r', fp);
 
-  for (size_t i = 0; i < prev_len; i++)
-  {
-    fputc (' ', fp);
-  }
+  for (size_t i = 0; i < prev_len; i++) fputc (' ', fp);
 
   fputc ('\r', fp);
 
@@ -61,10 +57,7 @@ static void main_log (hashcat_ctx_t *hashcat_ctx, FILE *fp, const int loglevel)
 
   const size_t prev_len = event_ctx->prev_len;
 
-  if (prev_len)
-  {
-    main_log_clear_line (prev_len, fp);
-  }
+  if (prev_len) main_log_clear_line (prev_len, fp);
 
   if (msg_newline == true)
   {
@@ -101,16 +94,16 @@ static void main_log (hashcat_ctx_t *hashcat_ctx, FILE *fp, const int loglevel)
   #else
   switch (loglevel)
   {
-    case LOGLEVEL_INFO:                                      break;
-    case LOGLEVEL_WARNING: hc_fwrite ("\033[33m", 5, 1, fp); break;
-    case LOGLEVEL_ERROR:   hc_fwrite ("\033[31m", 5, 1, fp); break;
-    case LOGLEVEL_ADVICE:  hc_fwrite ("\033[33m", 5, 1, fp); break;
+    case LOGLEVEL_INFO:                                   break;
+    case LOGLEVEL_WARNING: fwrite ("\033[33m", 5, 1, fp); break;
+    case LOGLEVEL_ERROR:   fwrite ("\033[31m", 5, 1, fp); break;
+    case LOGLEVEL_ADVICE:  fwrite ("\033[33m", 5, 1, fp); break;
   }
   #endif
 
   // finally, print
 
-  hc_fwrite (msg_buf, msg_len, 1, fp);
+  fwrite (msg_buf, msg_len, 1, fp);
 
   // color stuff post
 
@@ -125,10 +118,10 @@ static void main_log (hashcat_ctx_t *hashcat_ctx, FILE *fp, const int loglevel)
   #else
   switch (loglevel)
   {
-    case LOGLEVEL_INFO:                                     break;
-    case LOGLEVEL_WARNING: hc_fwrite ("\033[0m", 4, 1, fp); break;
-    case LOGLEVEL_ERROR:   hc_fwrite ("\033[0m", 4, 1, fp); break;
-    case LOGLEVEL_ADVICE:  hc_fwrite ("\033[0m", 4, 1, fp); break;
+    case LOGLEVEL_INFO:                                  break;
+    case LOGLEVEL_WARNING: fwrite ("\033[0m", 4, 1, fp); break;
+    case LOGLEVEL_ERROR:   fwrite ("\033[0m", 4, 1, fp); break;
+    case LOGLEVEL_ADVICE:  fwrite ("\033[0m", 4, 1, fp); break;
   }
   #endif
 
@@ -136,13 +129,13 @@ static void main_log (hashcat_ctx_t *hashcat_ctx, FILE *fp, const int loglevel)
 
   if (msg_newline == true)
   {
-    hc_fwrite (EOL, strlen (EOL), 1, fp);
+    fwrite (EOL, strlen (EOL), 1, fp);
 
     // on error, add another newline
 
     if (loglevel == LOGLEVEL_ERROR)
     {
-      hc_fwrite (EOL, strlen (EOL), 1, fp);
+      fwrite (EOL, strlen (EOL), 1, fp);
     }
   }
 
@@ -191,7 +184,7 @@ static void main_outerloop_starting (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MA
 
   status_ctx->shutdown_outer = false;
 
-  if ((user_options->example_hashes == false) && (user_options->keyspace == false) && (user_options->stdout_flag == false) && (user_options->opencl_info == false) && (user_options->speed_only == false))
+  if ((user_options->example_hashes == false) && (user_options->keyspace == false) && (user_options->stdout_flag == false) && (user_options->backend_info == false) && (user_options->speed_only == false))
   {
     if ((user_options_extra->wordlist_mode == WL_MODE_FILE) || (user_options_extra->wordlist_mode == WL_MODE_MASK))
     {
@@ -264,7 +257,7 @@ static void main_cracker_finished (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYB
 
   if (user_options->example_hashes  == true) return;
   if (user_options->keyspace        == true) return;
-  if (user_options->opencl_info     == true) return;
+  if (user_options->backend_info    == true) return;
   if (user_options->stdout_flag     == true) return;
 
   // if we had a prompt, clear it
@@ -334,15 +327,15 @@ static void main_cracker_hash_cracked (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, 
   user_options_t        *user_options       = hashcat_ctx->user_options;
   user_options_extra_t  *user_options_extra = hashcat_ctx->user_options_extra;
 
-  if (outfile_ctx->fp != NULL) return; // cracked hash was not written to an outfile
+  if (outfile_ctx->fp.pfp != NULL) return; // cracked hash was not written to an outfile
 
   if ((user_options_extra->wordlist_mode == WL_MODE_FILE) || (user_options_extra->wordlist_mode == WL_MODE_MASK))
   {
     if (outfile_ctx->filename == NULL) if (user_options->quiet == false) clear_prompt (hashcat_ctx);
   }
 
-  hc_fwrite (buf, len,          1, stdout);
-  hc_fwrite (EOL, strlen (EOL), 1, stdout);
+  fwrite (buf, len,          1, stdout);
+  fwrite (EOL, strlen (EOL), 1, stdout);
 
   if ((user_options_extra->wordlist_mode == WL_MODE_FILE) || (user_options_extra->wordlist_mode == WL_MODE_MASK))
   {
@@ -385,20 +378,20 @@ static void main_potfile_hash_show (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAY
 {
   outfile_ctx_t *outfile_ctx = hashcat_ctx->outfile_ctx;
 
-  if (outfile_ctx->fp != NULL) return; // cracked hash was not written to an outfile
+  if (outfile_ctx->fp.pfp != NULL) return; // cracked hash was not written to an outfile
 
-  hc_fwrite (buf, len,          1, stdout);
-  hc_fwrite (EOL, strlen (EOL), 1, stdout);
+  fwrite (buf, len,          1, stdout);
+  fwrite (EOL, strlen (EOL), 1, stdout);
 }
 
 static void main_potfile_hash_left (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
 {
   outfile_ctx_t *outfile_ctx = hashcat_ctx->outfile_ctx;
 
-  if (outfile_ctx->fp != NULL) return; // cracked hash was not written to an outfile
+  if (outfile_ctx->fp.pfp != NULL) return; // cracked hash was not written to an outfile
 
-  hc_fwrite (buf, len,          1, stdout);
-  hc_fwrite (EOL, strlen (EOL), 1, stdout);
+  fwrite (buf, len,          1, stdout);
+  fwrite (EOL, strlen (EOL), 1, stdout);
 }
 
 static void main_potfile_num_cracked (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
@@ -513,13 +506,22 @@ static void main_outerloop_mainscreen (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, 
   {
     if (hashconfig->has_optimized_kernel == true)
     {
-      event_log_advice (hashcat_ctx, "ATTENTION! Pure (unoptimized) OpenCL kernels selected.");
-      event_log_advice (hashcat_ctx, "This enables cracking passwords and salts > length 32 but for the price of drastically reduced performance.");
-      event_log_advice (hashcat_ctx, "If you want to switch to optimized OpenCL kernels, append -O to your commandline.");
+      event_log_advice (hashcat_ctx, "ATTENTION! Pure (unoptimized) backend kernels selected.");
+      event_log_advice (hashcat_ctx, "Using pure kernels enables cracking longer passwords but for the price of drastically reduced performance.");
+      event_log_advice (hashcat_ctx, "If you want to switch to optimized backend kernels, append -O to your commandline.");
+      event_log_advice (hashcat_ctx, "See the above message to find out about the exact limits.");
       event_log_advice (hashcat_ctx, NULL);
     }
   }
 
+  if (user_options->keep_guessing == true)
+  {
+    event_log_advice (hashcat_ctx, "ATTENTION! --keep-guessing mode is enabled.");
+    event_log_advice (hashcat_ctx, "This tells hashcat to continue attacking all target hashes until exhaustion.");
+    event_log_advice (hashcat_ctx, "hashcat will NOT check for or remove targets present in the potfile, and");
+    event_log_advice (hashcat_ctx, "will add ALL plains/collisions found, even duplicates, to the potfile.");
+    event_log_advice (hashcat_ctx, NULL);
+  }
   /**
    * Watchdog and Temperature balance
    */
@@ -541,7 +543,7 @@ static void main_outerloop_mainscreen (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, 
   event_log_info (hashcat_ctx, NULL);
 }
 
-static void main_opencl_session_pre (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
+static void main_backend_session_pre (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
 {
   const user_options_t *user_options = hashcat_ctx->user_options;
 
@@ -550,7 +552,7 @@ static void main_opencl_session_pre (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MA
   event_log_info_nn (hashcat_ctx, "Initializing device kernels and memory...");
 }
 
-static void main_opencl_session_post (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
+static void main_backend_session_post (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
 {
   const user_options_t *user_options = hashcat_ctx->user_options;
 
@@ -559,18 +561,19 @@ static void main_opencl_session_post (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, M
   event_log_info_nn (hashcat_ctx, "Initialized device kernels and memory...");
 }
 
-static void main_opencl_device_init_pre (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
+static void main_backend_session_hostmem (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
 {
   const user_options_t *user_options = hashcat_ctx->user_options;
 
   if (user_options->quiet == true) return;
 
-  const u32 *device_id = (const u32 *) buf;
+  const u64 *hostmem = (const u64 *) buf;
 
-  event_log_info_nn (hashcat_ctx, "Initializing OpenCL runtime for device #%u...", *device_id + 1);
+  event_log_info (hashcat_ctx, "Host memory required for this attack: %" PRIu64 " MB", *hostmem / (1024 * 1024));
+  event_log_info (hashcat_ctx, NULL);
 }
 
-static void main_opencl_device_init_post (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
+static void main_backend_device_init_pre (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
 {
   const user_options_t *user_options = hashcat_ctx->user_options;
 
@@ -578,7 +581,18 @@ static void main_opencl_device_init_post (MAYBE_UNUSED hashcat_ctx_t *hashcat_ct
 
   const u32 *device_id = (const u32 *) buf;
 
-  event_log_info_nn (hashcat_ctx, "Initialized OpenCL runtime for device #%u...", *device_id + 1);
+  event_log_info_nn (hashcat_ctx, "Initializing backend runtime for device #%u...", *device_id + 1);
+}
+
+static void main_backend_device_init_post (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
+{
+  const user_options_t *user_options = hashcat_ctx->user_options;
+
+  if (user_options->quiet == true) return;
+
+  const u32 *device_id = (const u32 *) buf;
+
+  event_log_info_nn (hashcat_ctx, "Initialized backend runtime for device #%u...", *device_id + 1);
 }
 
 static void main_bitmap_init_pre (MAYBE_UNUSED hashcat_ctx_t *hashcat_ctx, MAYBE_UNUSED const void *buf, MAYBE_UNUSED const size_t len)
@@ -727,7 +741,7 @@ static void main_monitor_performance_hint (MAYBE_UNUSED hashcat_ctx_t *hashcat_c
     event_log_advice (hashcat_ctx, NULL);
   }
 
-  event_log_advice (hashcat_ctx, "* Update your OpenCL runtime / driver the right way:");
+  event_log_advice (hashcat_ctx, "* Update your backend API runtime / driver the right way:");
   event_log_advice (hashcat_ctx, "  https://hashcat.net/faq/wrongdriver");
   event_log_advice (hashcat_ctx, NULL);
   event_log_advice (hashcat_ctx, "* Create more work items to make use of your parallelization power:");
@@ -1014,10 +1028,11 @@ static void event (const u32 id, hashcat_ctx_t *hashcat_ctx, const void *buf, co
     case EVENT_MONITOR_PERFORMANCE_HINT:  main_monitor_performance_hint  (hashcat_ctx, buf, len); break;
     case EVENT_MONITOR_NOINPUT_HINT:      main_monitor_noinput_hint      (hashcat_ctx, buf, len); break;
     case EVENT_MONITOR_NOINPUT_ABORT:     main_monitor_noinput_abort     (hashcat_ctx, buf, len); break;
-    case EVENT_OPENCL_SESSION_POST:       main_opencl_session_post       (hashcat_ctx, buf, len); break;
-    case EVENT_OPENCL_SESSION_PRE:        main_opencl_session_pre        (hashcat_ctx, buf, len); break;
-    case EVENT_OPENCL_DEVICE_INIT_POST:   main_opencl_device_init_post   (hashcat_ctx, buf, len); break;
-    case EVENT_OPENCL_DEVICE_INIT_PRE:    main_opencl_device_init_pre    (hashcat_ctx, buf, len); break;
+    case EVENT_BACKEND_SESSION_POST:      main_backend_session_post      (hashcat_ctx, buf, len); break;
+    case EVENT_BACKEND_SESSION_PRE:       main_backend_session_pre       (hashcat_ctx, buf, len); break;
+    case EVENT_BACKEND_SESSION_HOSTMEM:   main_backend_session_hostmem   (hashcat_ctx, buf, len); break;
+    case EVENT_BACKEND_DEVICE_INIT_POST:  main_backend_device_init_post  (hashcat_ctx, buf, len); break;
+    case EVENT_BACKEND_DEVICE_INIT_PRE:   main_backend_device_init_pre   (hashcat_ctx, buf, len); break;
     case EVENT_OUTERLOOP_FINISHED:        main_outerloop_finished        (hashcat_ctx, buf, len); break;
     case EVENT_OUTERLOOP_MAINSCREEN:      main_outerloop_mainscreen      (hashcat_ctx, buf, len); break;
     case EVENT_OUTERLOOP_STARTING:        main_outerloop_starting        (hashcat_ctx, buf, len); break;
@@ -1047,8 +1062,12 @@ int main (int argc, char **argv)
 
   const int rc_hashcat_init = hashcat_init (hashcat_ctx, event);
 
-  if (rc_hashcat_init == -1) return -1;
+  if (rc_hashcat_init == -1)
+  {
+    hcfree (hashcat_ctx);
 
+    return -1;
+  }
   // install and shared folder need to be set to recognize "make install" use
 
   const char *install_folder = NULL;
@@ -1066,17 +1085,32 @@ int main (int argc, char **argv)
 
   const int rc_options_init = user_options_init (hashcat_ctx);
 
-  if (rc_options_init == -1) return -1;
+  if (rc_options_init == -1)
+  {
+    hcfree (hashcat_ctx);
+
+    return -1;
+  }
 
   // parse commandline parameters and check them
 
   const int rc_options_getopt = user_options_getopt (hashcat_ctx, argc, argv);
 
-  if (rc_options_getopt == -1) return -1;
+  if (rc_options_getopt == -1)
+  {
+    hcfree (hashcat_ctx);
+
+    return -1;
+  }
 
   const int rc_options_sanity = user_options_sanity (hashcat_ctx);
 
-  if (rc_options_sanity == -1) return -1;
+  if (rc_options_sanity == -1)
+  {
+    hcfree (hashcat_ctx);
+
+    return -1;
+  }
 
   // some early exits
 
@@ -1087,6 +1121,8 @@ int main (int argc, char **argv)
   {
     const int rc = brain_server (user_options->brain_host, user_options->brain_port, user_options->brain_password, user_options->brain_session_whitelist);
 
+    hcfree (hashcat_ctx);
+
     return rc;
   }
   #endif
@@ -1095,10 +1131,12 @@ int main (int argc, char **argv)
   {
     printf ("%s\n", VERSION_TAG);
 
+    hcfree (hashcat_ctx);
+
     return 0;
   }
 
-  // init a hashcat session; this initializes opencl devices, hwmon, etc
+  // init a hashcat session; this initializes backend devices, hwmon, etc
 
   welcome_screen (hashcat_ctx, VERSION_TAG);
 
@@ -1120,11 +1158,11 @@ int main (int argc, char **argv)
 
       rc_final = 0;
     }
-    else if (user_options->opencl_info == true)
+    else if (user_options->backend_info == true)
     {
-      // if this is just opencl_info, no need to execute some real cracking session
+      // if this is just backend_info, no need to execute some real cracking session
 
-      opencl_info (hashcat_ctx);
+      backend_info (hashcat_ctx);
 
       rc_final = 0;
     }
@@ -1132,7 +1170,7 @@ int main (int argc, char **argv)
     {
       // now execute hashcat
 
-      opencl_info_compact (hashcat_ctx);
+      backend_info_compact (hashcat_ctx);
 
       user_options_info (hashcat_ctx);
 
@@ -1140,7 +1178,7 @@ int main (int argc, char **argv)
     }
   }
 
-  // finish the hashcat session, this shuts down opencl devices, hwmon, etc
+  // finish the hashcat session, this shuts down backend devices, hwmon, etc
 
   hashcat_session_destroy (hashcat_ctx);
 
@@ -1152,7 +1190,7 @@ int main (int argc, char **argv)
 
   hashcat_destroy (hashcat_ctx);
 
-  free (hashcat_ctx);
+  hcfree (hashcat_ctx);
 
   return rc_final;
 }

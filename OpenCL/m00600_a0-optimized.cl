@@ -5,14 +5,25 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
+#endif
+
+typedef struct blake2
+{
+  u64 h[8];
+  u64 t[2];
+  u64 f[2];
+  u32 buflen;
+  u32 outlen;
+
+} blake2_t;
 
 #define BLAKE2B_FINAL   1
 #define BLAKE2B_UPDATE  0
@@ -20,13 +31,13 @@
 #define BLAKE2B_G(r,i,a,b,c,d)                \
   do {                                        \
     a = a + b + m[blake2b_sigma[r][2*i+0]];   \
-    d = rotr64 (d ^ a, 32);                   \
+    d = hc_rotr64 (d ^ a, 32);                   \
     c = c + d;                                \
-    b = rotr64 (b ^ c, 24);                   \
+    b = hc_rotr64 (b ^ c, 24);                   \
     a = a + b + m[blake2b_sigma[r][2*i+1]];   \
-    d = rotr64 (d ^ a, 16);                   \
+    d = hc_rotr64 (d ^ a, 16);                   \
     c = c + d;                                \
-    b = rotr64 (b ^ c, 63);                   \
+    b = hc_rotr64 (b ^ c, 63);                   \
   } while(0)
 
 #define BLAKE2B_ROUND(r)                     \
@@ -121,14 +132,17 @@ DECLSPEC void blake2b_transform (u64x *h, u64x *t, u64x *f, u64x *m, u64x *v, co
   h[7] = h[7] ^ v[7] ^ v[15];
 }
 
-__kernel void m00600_m04 (KERN_ATTR_RULES_ESALT (blake2_t))
+KERNEL_FQ void m00600_m04 (KERN_ATTR_RULES_ESALT (blake2_t))
 {
   /**
    * modifier
    */
 
-  const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
+
+  const u64 gid = get_global_id (0);
+
+  if (gid >= gid_max) return;
 
   u32 pw_buf0[4];
   u32 pw_buf1[4];
@@ -173,10 +187,9 @@ __kernel void m00600_m04 (KERN_ATTR_RULES_ESALT (blake2_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect(pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     u64x digest[8];
-
     u64x m[16];
     u64x v[16];
 
@@ -218,15 +231,15 @@ __kernel void m00600_m04 (KERN_ATTR_RULES_ESALT (blake2_t))
   }
 }
 
-__kernel void m00600_m08 (KERN_ATTR_RULES_ESALT (blake2_t))
+KERNEL_FQ void m00600_m08 (KERN_ATTR_RULES_ESALT (blake2_t))
 {
 }
 
-__kernel void m00600_m16 (KERN_ATTR_RULES_ESALT (blake2_t))
+KERNEL_FQ void m00600_m16 (KERN_ATTR_RULES_ESALT (blake2_t))
 {
 }
 
-__kernel void m00600_s04 (KERN_ATTR_RULES_ESALT (blake2_t))
+KERNEL_FQ void m00600_s04 (KERN_ATTR_RULES_ESALT (blake2_t))
 {
   /**
    * modifier
@@ -293,7 +306,7 @@ __kernel void m00600_s04 (KERN_ATTR_RULES_ESALT (blake2_t))
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect(pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     u64x digest[8];
     u64x m[16];
@@ -337,10 +350,10 @@ __kernel void m00600_s04 (KERN_ATTR_RULES_ESALT (blake2_t))
   }
 }
 
-__kernel void m00600_s08 (KERN_ATTR_RULES_ESALT (blake2_t))
+KERNEL_FQ void m00600_s08 (KERN_ATTR_RULES_ESALT (blake2_t))
 {
 }
 
-__kernel void m00600_s16 (KERN_ATTR_RULES_ESALT (blake2_t))
+KERNEL_FQ void m00600_s16 (KERN_ATTR_RULES_ESALT (blake2_t))
 {
 }

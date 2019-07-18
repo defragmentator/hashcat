@@ -7,10 +7,10 @@
 #include "types.h"
 #include "event.h"
 #include "locking.h"
-#include "rp_kernel_on_cpu.h"
-#include "rp_kernel_on_cpu_optimized.h"
+#include "emu_inc_rp.h"
+#include "emu_inc_rp_optimized.h"
 #include "mpsp.h"
-#include "opencl.h"
+#include "backend.h"
 #include "shared.h"
 #include "stdout.h"
 
@@ -18,7 +18,7 @@ static void out_flush (out_t *out)
 {
   if (out->len == 0) return;
 
-  hc_fwrite (out->buf, 1, out->len, out->fp);
+  hc_fwrite (out->buf, 1, out->len, &out->fp);
 
   out->len = 0;
 }
@@ -44,7 +44,7 @@ static void out_push (out_t *out, const u8 *pw_buf, const int pw_len)
 
   #endif
 
-  if (out->len >= HCBUFSIZ_TINY - 300)
+  if (out->len >= HCBUFSIZ_SMALL - 300)
   {
     out_flush (out);
   }
@@ -59,33 +59,33 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
   straight_ctx_t   *straight_ctx   = hashcat_ctx->straight_ctx;
   user_options_t   *user_options   = hashcat_ctx->user_options;
 
-  out_t out;
-
-  out.fp = stdout;
-
   char *filename = outfile_ctx->filename;
+
+  out_t out;
 
   if (filename)
   {
-    FILE *fp = fopen (filename, "ab");
-
-    if (fp == NULL)
+    if (hc_fopen (&out.fp, filename, "ab") == false)
     {
       event_log_error (hashcat_ctx, "%s: %s", filename, strerror (errno));
 
       return -1;
     }
 
-    if (lock_file (fp) == -1)
+    if (hc_lockfile (&out.fp) == -1)
     {
-      fclose (fp);
+      hc_fclose (&out.fp);
 
       event_log_error (hashcat_ctx, "%s: %s", filename, strerror (errno));
 
       return -1;
     }
-
-    out.fp = fp;
+  }
+  else
+  {
+    out.fp.is_gzip = false;
+    out.fp.pfp = stdout;
+    out.fp.fd = fileno (stdout);
   }
 
   out.len = 0;
@@ -108,7 +108,7 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
       if (rc == -1)
       {
-        if (filename) fclose (out.fp);
+        if (filename) hc_fclose (&out.fp);
 
         return -1;
       }
@@ -152,7 +152,7 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
       if (rc == -1)
       {
-        if (filename) fclose (out.fp);
+        if (filename) hc_fclose (&out.fp);
 
         return -1;
       }
@@ -222,7 +222,7 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
       if (rc == -1)
       {
-        if (filename) fclose (out.fp);
+        if (filename) hc_fclose (&out.fp);
 
         return -1;
       }
@@ -259,7 +259,7 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
       if (rc == -1)
       {
-        if (filename) fclose (out.fp);
+        if (filename) hc_fclose (&out.fp);
 
         return -1;
       }
@@ -291,7 +291,7 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
   out_flush (&out);
 
-  if (filename) fclose (out.fp);
+  if (filename) hc_fclose (&out.fp);
 
   return 0;
 }

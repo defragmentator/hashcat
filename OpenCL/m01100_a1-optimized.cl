@@ -5,14 +5,16 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
+#include "inc_hash_md4.cl"
+#endif
 
-__kernel void m01100_m04 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m01100_m04 (KERN_ATTR_BASIC ())
 {
   /**
    * base
@@ -39,7 +41,7 @@ __kernel void m01100_m04 (KERN_ATTR_BASIC ())
    * salt
    */
 
-  __local salt_t s_salt_buf[1];
+  LOCAL_VK salt_t s_salt_buf[1];
 
   if (lid == 0)
   {
@@ -48,7 +50,7 @@ __kernel void m01100_m04 (KERN_ATTR_BASIC ())
     s_salt_buf[0].salt_buf[10] = (16 + s_salt_buf[0].salt_len) * 8;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -285,15 +287,15 @@ __kernel void m01100_m04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m01100_m08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m01100_m08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m01100_m16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m01100_m16 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m01100_s04 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m01100_s04 (KERN_ATTR_BASIC ())
 {
   /**
    * base
@@ -320,7 +322,7 @@ __kernel void m01100_s04 (KERN_ATTR_BASIC ())
    * salt
    */
 
-  __local salt_t s_salt_buf[1];
+  LOCAL_VK salt_t s_salt_buf[1];
 
   if (lid == 0)
   {
@@ -329,7 +331,7 @@ __kernel void m01100_s04 (KERN_ATTR_BASIC ())
     s_salt_buf[0].salt_buf[10] = (16 + s_salt_buf[0].salt_len) * 8;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -581,10 +583,10 @@ __kernel void m01100_s04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m01100_s08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m01100_s08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m01100_s16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m01100_s16 (KERN_ATTR_BASIC ())
 {
 }

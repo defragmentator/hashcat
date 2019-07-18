@@ -5,24 +5,45 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
 #include "inc_hash_ripemd160.cl"
-
 #include "inc_cipher_aes.cl"
 #include "inc_cipher_twofish.cl"
 #include "inc_cipher_serpent.cl"
-#include "inc_cipher_camellia.cl"
-#include "inc_cipher_kuznyechik.cl"
+#endif
 
+typedef struct tc
+{
+  u32 salt_buf[32];
+  u32 data_buf[112];
+  u32 keyfile_buf[16];
+  u32 signature;
+
+  keyboard_layout_mapping_t keyboard_layout_mapping_buf[256];
+  int                       keyboard_layout_mapping_cnt;
+
+} tc_t;
+
+#ifdef KERNEL_STATIC
 #include "inc_truecrypt_keyfile.cl"
 #include "inc_truecrypt_crc32.cl"
 #include "inc_truecrypt_xts.cl"
-#include "inc_veracrypt_xts.cl"
+#endif
+
+typedef struct tc_tmp
+{
+  u32 ipad[16];
+  u32 opad[16];
+
+  u32 dgst[64];
+  u32 out[64];
+
+} tc_tmp_t;
 
 DECLSPEC void hmac_ripemd160_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x *ipad, u32x *opad, u32x *digest)
 {
@@ -60,7 +81,7 @@ DECLSPEC void hmac_ripemd160_run_V (u32x *w0, u32x *w1, u32x *w2, u32x *w3, u32x
   ripemd160_transform_vector (w0, w1, w2, w3, digest);
 }
 
-__kernel void m06213_init (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
+KERNEL_FQ void m06213_init (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -72,14 +93,14 @@ __kernel void m06213_init (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 
   const int keyboard_layout_mapping_cnt = esalt_bufs[digests_offset].keyboard_layout_mapping_cnt;
 
-  __local keyboard_layout_mapping_t s_keyboard_layout_mapping_buf[256];
+  LOCAL_VK keyboard_layout_mapping_t s_keyboard_layout_mapping_buf[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
     s_keyboard_layout_mapping_buf[i] = esalt_bufs[digests_offset].keyboard_layout_mapping_buf[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -111,7 +132,7 @@ __kernel void m06213_init (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 
   const u32 pw_len = pws[gid].pw_len;
 
-  execute_keyboard_layout_mapping (w0, w1, w2, w3, pw_len, s_keyboard_layout_mapping_buf, keyboard_layout_mapping_cnt);
+  hc_execute_keyboard_layout_mapping (w0, w1, w2, w3, pw_len, s_keyboard_layout_mapping_buf, keyboard_layout_mapping_cnt);
 
   w0[0] = u8add (w0[0], esalt_bufs[digests_offset].keyfile_buf[ 0]);
   w0[1] = u8add (w0[1], esalt_bufs[digests_offset].keyfile_buf[ 1]);
@@ -187,7 +208,7 @@ __kernel void m06213_init (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
   }
 }
 
-__kernel void m06213_loop (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
+KERNEL_FQ void m06213_loop (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 {
   const u64 gid = get_global_id (0);
 
@@ -272,7 +293,7 @@ __kernel void m06213_loop (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
   }
 }
 
-__kernel void m06213_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
+KERNEL_FQ void m06213_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 {
   const u64 gid = get_global_id (0);
   const u64 lid = get_local_id (0);
@@ -284,17 +305,17 @@ __kernel void m06213_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
 
   #ifdef REAL_SHM
 
-  __local u32 s_td0[256];
-  __local u32 s_td1[256];
-  __local u32 s_td2[256];
-  __local u32 s_td3[256];
-  __local u32 s_td4[256];
+  LOCAL_VK u32 s_td0[256];
+  LOCAL_VK u32 s_td1[256];
+  LOCAL_VK u32 s_td2[256];
+  LOCAL_VK u32 s_td3[256];
+  LOCAL_VK u32 s_td4[256];
 
-  __local u32 s_te0[256];
-  __local u32 s_te1[256];
-  __local u32 s_te2[256];
-  __local u32 s_te3[256];
-  __local u32 s_te4[256];
+  LOCAL_VK u32 s_te0[256];
+  LOCAL_VK u32 s_te1[256];
+  LOCAL_VK u32 s_te2[256];
+  LOCAL_VK u32 s_te3[256];
+  LOCAL_VK u32 s_te4[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -311,21 +332,21 @@ __kernel void m06213_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
     s_te4[i] = te4[i];
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   #else
 
-  __constant u32a *s_td0 = td0;
-  __constant u32a *s_td1 = td1;
-  __constant u32a *s_td2 = td2;
-  __constant u32a *s_td3 = td3;
-  __constant u32a *s_td4 = td4;
+  CONSTANT_AS u32a *s_td0 = td0;
+  CONSTANT_AS u32a *s_td1 = td1;
+  CONSTANT_AS u32a *s_td2 = td2;
+  CONSTANT_AS u32a *s_td3 = td3;
+  CONSTANT_AS u32a *s_td4 = td4;
 
-  __constant u32a *s_te0 = te0;
-  __constant u32a *s_te1 = te1;
-  __constant u32a *s_te2 = te2;
-  __constant u32a *s_te3 = te3;
-  __constant u32a *s_te4 = te4;
+  CONSTANT_AS u32a *s_te0 = te0;
+  CONSTANT_AS u32a *s_te1 = te1;
+  CONSTANT_AS u32a *s_te2 = te2;
+  CONSTANT_AS u32a *s_te3 = te3;
+  CONSTANT_AS u32a *s_te4 = te4;
 
   #endif
 
@@ -353,43 +374,27 @@ __kernel void m06213_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
   ukey2[6] = tmps[gid].out[14];
   ukey2[7] = tmps[gid].out[15];
 
-  if (verify_header_aes (esalt_bufs, ukey1, ukey2, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
+  if (verify_header_serpent (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 
-  if (verify_header_serpent (esalt_bufs, ukey1, ukey2) == 1)
+  if (verify_header_twofish (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 
-  if (verify_header_twofish (esalt_bufs, ukey1, ukey2) == 1)
+  if (verify_header_aes (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
-    }
-  }
-
-  if (verify_header_camellia (esalt_bufs, ukey1, ukey2) == 1)
-  {
-    if (atomic_inc (&hashes_shown[0]) == 0)
-    {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
-    }
-  }
-
-  if (verify_header_kuznyechik (esalt_bufs, ukey1, ukey2) == 1)
-  {
-    if (atomic_inc (&hashes_shown[0]) == 0)
-    {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 
@@ -415,59 +420,27 @@ __kernel void m06213_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
   ukey4[6] = tmps[gid].out[30];
   ukey4[7] = tmps[gid].out[31];
 
-  if (verify_header_aes_twofish (esalt_bufs, ukey1, ukey2, ukey3, ukey4, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
+  if (verify_header_serpent_aes (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2, ukey3, ukey4, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 
-  if (verify_header_serpent_aes (esalt_bufs, ukey1, ukey2, ukey3, ukey4, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
+  if (verify_header_twofish_serpent (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2, ukey3, ukey4) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 
-  if (verify_header_twofish_serpent (esalt_bufs, ukey1, ukey2, ukey3, ukey4) == 1)
+  if (verify_header_aes_twofish (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2, ukey3, ukey4, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
-    }
-  }
-
-  if (verify_header_camellia_kuznyechik (esalt_bufs, ukey1, ukey2, ukey3, ukey4) == 1)
-  {
-    if (atomic_inc (&hashes_shown[0]) == 0)
-    {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
-    }
-  }
-
-  if (verify_header_camellia_serpent (esalt_bufs, ukey1, ukey2, ukey3, ukey4) == 1)
-  {
-    if (atomic_inc (&hashes_shown[0]) == 0)
-    {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
-    }
-  }
-
-  if (verify_header_kuznyechik_aes (esalt_bufs, ukey1, ukey2, ukey3, ukey4, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
-  {
-    if (atomic_inc (&hashes_shown[0]) == 0)
-    {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
-    }
-  }
-
-  if (verify_header_kuznyechik_twofish (esalt_bufs, ukey1, ukey2, ukey3, ukey4) == 1)
-  {
-    if (atomic_inc (&hashes_shown[0]) == 0)
-    {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 
@@ -493,27 +466,19 @@ __kernel void m06213_comp (KERN_ATTR_TMPS_ESALT (tc_tmp_t, tc_t))
   ukey6[6] = tmps[gid].out[46];
   ukey6[7] = tmps[gid].out[47];
 
-  if (verify_header_aes_twofish_serpent (esalt_bufs, ukey1, ukey2, ukey3, ukey4, ukey5, ukey6, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
+  if (verify_header_serpent_twofish_aes (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2, ukey3, ukey4, ukey5, ukey6, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 
-  if (verify_header_serpent_twofish_aes (esalt_bufs, ukey1, ukey2, ukey3, ukey4, ukey5, ukey6, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
+  if (verify_header_aes_twofish_serpent (esalt_bufs[0].data_buf, esalt_bufs[0].signature, ukey1, ukey2, ukey3, ukey4, ukey5, ukey6, s_te0, s_te1, s_te2, s_te3, s_te4, s_td0, s_td1, s_td2, s_td3, s_td4) == 1)
   {
     if (atomic_inc (&hashes_shown[0]) == 0)
     {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
-    }
-  }
-
-  if (verify_header_kuznyechik_serpent_camellia (esalt_bufs, ukey1, ukey2, ukey3, ukey4, ukey5, ukey6) == 1)
-  {
-    if (atomic_inc (&hashes_shown[0]) == 0)
-    {
-      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0);
+      mark_hash (plains_buf, d_return_buf, salt_pos, digests_cnt, 0, 0, gid, 0, 0, 0);
     }
   }
 }

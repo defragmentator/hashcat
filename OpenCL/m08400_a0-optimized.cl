@@ -5,29 +5,30 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_rp_optimized.h"
 #include "inc_rp_optimized.cl"
 #include "inc_simd.cl"
 #include "inc_hash_sha1.cl"
-
-#if   VECT_SIZE == 1
-#define uint_to_hex_lower8_le(i) (u32x) (l_bin2asc[(i)])
-#elif VECT_SIZE == 2
-#define uint_to_hex_lower8_le(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
-#elif VECT_SIZE == 4
-#define uint_to_hex_lower8_le(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
-#elif VECT_SIZE == 8
-#define uint_to_hex_lower8_le(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
-#elif VECT_SIZE == 16
-#define uint_to_hex_lower8_le(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
 #endif
 
-__kernel void m08400_m04 (KERN_ATTR_RULES ())
+#if   VECT_SIZE == 1
+#define uint_to_hex_lower8_le(i) make_u32x (l_bin2asc[(i)])
+#elif VECT_SIZE == 2
+#define uint_to_hex_lower8_le(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
+#elif VECT_SIZE == 4
+#define uint_to_hex_lower8_le(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
+#elif VECT_SIZE == 8
+#define uint_to_hex_lower8_le(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
+#elif VECT_SIZE == 16
+#define uint_to_hex_lower8_le(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
+#endif
+
+KERNEL_FQ void m08400_m04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -41,7 +42,7 @@ __kernel void m08400_m04 (KERN_ATTR_RULES ())
    * shared
    */
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -52,7 +53,7 @@ __kernel void m08400_m04 (KERN_ATTR_RULES ())
                  | ((i1 < 10) ? '0' + i1 : 'a' - 10 + i1) << 8;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -82,16 +83,16 @@ __kernel void m08400_m04 (KERN_ATTR_RULES ())
   u32 salt_buf1[4];
   u32 salt_buf2[4];
 
-  salt_buf0[0] = swap32_S (salt_bufs[salt_pos].salt_buf[ 0]);
-  salt_buf0[1] = swap32_S (salt_bufs[salt_pos].salt_buf[ 1]);
-  salt_buf0[2] = swap32_S (salt_bufs[salt_pos].salt_buf[ 2]);
-  salt_buf0[3] = swap32_S (salt_bufs[salt_pos].salt_buf[ 3]);
-  salt_buf1[0] = swap32_S (salt_bufs[salt_pos].salt_buf[ 4]);
-  salt_buf1[1] = swap32_S (salt_bufs[salt_pos].salt_buf[ 5]);
-  salt_buf1[2] = swap32_S (salt_bufs[salt_pos].salt_buf[ 6]);
-  salt_buf1[3] = swap32_S (salt_bufs[salt_pos].salt_buf[ 7]);
-  salt_buf2[0] = swap32_S (salt_bufs[salt_pos].salt_buf[ 8]);
-  salt_buf2[1] = swap32_S (salt_bufs[salt_pos].salt_buf[ 9]);
+  salt_buf0[0] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 0]);
+  salt_buf0[1] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 1]);
+  salt_buf0[2] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 2]);
+  salt_buf0[3] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 3]);
+  salt_buf1[0] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 4]);
+  salt_buf1[1] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 5]);
+  salt_buf1[2] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 6]);
+  salt_buf1[3] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 7]);
+  salt_buf2[0] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 8]);
+  salt_buf2[1] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 9]);
   salt_buf2[2] = 0;
   salt_buf2[3] = 0;
 
@@ -108,7 +109,7 @@ __kernel void m08400_m04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x80_2x4_VV (w0, w1, out_len);
 
@@ -116,20 +117,20 @@ __kernel void m08400_m04 (KERN_ATTR_RULES ())
      * SHA1
      */
 
-    w0[0] = swap32 (w0[0]);
-    w0[1] = swap32 (w0[1]);
-    w0[2] = swap32 (w0[2]);
-    w0[3] = swap32 (w0[3]);
-    w1[0] = swap32 (w1[0]);
-    w1[1] = swap32 (w1[1]);
-    w1[2] = swap32 (w1[2]);
-    w1[3] = swap32 (w1[3]);
-    w2[0] = swap32 (w2[0]);
-    w2[1] = swap32 (w2[1]);
-    w2[2] = swap32 (w2[2]);
-    w2[3] = swap32 (w2[3]);
-    w3[0] = swap32 (w3[0]);
-    w3[1] = swap32 (w3[1]);
+    w0[0] = hc_swap32 (w0[0]);
+    w0[1] = hc_swap32 (w0[1]);
+    w0[2] = hc_swap32 (w0[2]);
+    w0[3] = hc_swap32 (w0[3]);
+    w1[0] = hc_swap32 (w1[0]);
+    w1[1] = hc_swap32 (w1[1]);
+    w1[2] = hc_swap32 (w1[2]);
+    w1[3] = hc_swap32 (w1[3]);
+    w2[0] = hc_swap32 (w2[0]);
+    w2[1] = hc_swap32 (w2[1]);
+    w2[2] = hc_swap32 (w2[2]);
+    w2[3] = hc_swap32 (w2[3]);
+    w3[0] = hc_swap32 (w3[0]);
+    w3[1] = hc_swap32 (w3[1]);
     w3[2] = 0;
     w3[3] = out_len * 8;
 
@@ -273,15 +274,15 @@ __kernel void m08400_m04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m08400_m08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m08400_m08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m08400_m16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m08400_m16 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m08400_s04 (KERN_ATTR_RULES ())
+KERNEL_FQ void m08400_s04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -295,7 +296,7 @@ __kernel void m08400_s04 (KERN_ATTR_RULES ())
    * shared
    */
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -306,7 +307,7 @@ __kernel void m08400_s04 (KERN_ATTR_RULES ())
                  | ((i1 < 10) ? '0' + i1 : 'a' - 10 + i1) << 8;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -336,16 +337,16 @@ __kernel void m08400_s04 (KERN_ATTR_RULES ())
   u32 salt_buf1[4];
   u32 salt_buf2[4];
 
-  salt_buf0[0] = swap32_S (salt_bufs[salt_pos].salt_buf[ 0]);
-  salt_buf0[1] = swap32_S (salt_bufs[salt_pos].salt_buf[ 1]);
-  salt_buf0[2] = swap32_S (salt_bufs[salt_pos].salt_buf[ 2]);
-  salt_buf0[3] = swap32_S (salt_bufs[salt_pos].salt_buf[ 3]);
-  salt_buf1[0] = swap32_S (salt_bufs[salt_pos].salt_buf[ 4]);
-  salt_buf1[1] = swap32_S (salt_bufs[salt_pos].salt_buf[ 5]);
-  salt_buf1[2] = swap32_S (salt_bufs[salt_pos].salt_buf[ 6]);
-  salt_buf1[3] = swap32_S (salt_bufs[salt_pos].salt_buf[ 7]);
-  salt_buf2[0] = swap32_S (salt_bufs[salt_pos].salt_buf[ 8]);
-  salt_buf2[1] = swap32_S (salt_bufs[salt_pos].salt_buf[ 9]);
+  salt_buf0[0] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 0]);
+  salt_buf0[1] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 1]);
+  salt_buf0[2] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 2]);
+  salt_buf0[3] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 3]);
+  salt_buf1[0] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 4]);
+  salt_buf1[1] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 5]);
+  salt_buf1[2] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 6]);
+  salt_buf1[3] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 7]);
+  salt_buf2[0] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 8]);
+  salt_buf2[1] = hc_swap32_S (salt_bufs[salt_pos].salt_buf[ 9]);
   salt_buf2[2] = 0;
   salt_buf2[3] = 0;
 
@@ -374,7 +375,7 @@ __kernel void m08400_s04 (KERN_ATTR_RULES ())
     u32x w2[4] = { 0 };
     u32x w3[4] = { 0 };
 
-    const u32x out_len = apply_rules_vect (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
+    const u32x out_len = apply_rules_vect_optimized (pw_buf0, pw_buf1, pw_len, rules_buf, il_pos, w0, w1);
 
     append_0x80_2x4_VV (w0, w1, out_len);
 
@@ -382,20 +383,20 @@ __kernel void m08400_s04 (KERN_ATTR_RULES ())
      * SHA1
      */
 
-    w0[0] = swap32 (w0[0]);
-    w0[1] = swap32 (w0[1]);
-    w0[2] = swap32 (w0[2]);
-    w0[3] = swap32 (w0[3]);
-    w1[0] = swap32 (w1[0]);
-    w1[1] = swap32 (w1[1]);
-    w1[2] = swap32 (w1[2]);
-    w1[3] = swap32 (w1[3]);
-    w2[0] = swap32 (w2[0]);
-    w2[1] = swap32 (w2[1]);
-    w2[2] = swap32 (w2[2]);
-    w2[3] = swap32 (w2[3]);
-    w3[0] = swap32 (w3[0]);
-    w3[1] = swap32 (w3[1]);
+    w0[0] = hc_swap32 (w0[0]);
+    w0[1] = hc_swap32 (w0[1]);
+    w0[2] = hc_swap32 (w0[2]);
+    w0[3] = hc_swap32 (w0[3]);
+    w1[0] = hc_swap32 (w1[0]);
+    w1[1] = hc_swap32 (w1[1]);
+    w1[2] = hc_swap32 (w1[2]);
+    w1[3] = hc_swap32 (w1[3]);
+    w2[0] = hc_swap32 (w2[0]);
+    w2[1] = hc_swap32 (w2[1]);
+    w2[2] = hc_swap32 (w2[2]);
+    w2[3] = hc_swap32 (w2[3]);
+    w3[0] = hc_swap32 (w3[0]);
+    w3[1] = hc_swap32 (w3[1]);
     w3[2] = 0;
     w3[3] = out_len * 8;
 
@@ -539,10 +540,10 @@ __kernel void m08400_s04 (KERN_ATTR_RULES ())
   }
 }
 
-__kernel void m08400_s08 (KERN_ATTR_RULES ())
+KERNEL_FQ void m08400_s08 (KERN_ATTR_RULES ())
 {
 }
 
-__kernel void m08400_s16 (KERN_ATTR_RULES ())
+KERNEL_FQ void m08400_s16 (KERN_ATTR_RULES ())
 {
 }

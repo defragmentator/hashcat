@@ -5,26 +5,28 @@
 
 #define NEW_SIMD_CODE
 
-#include "inc_vendor.cl"
-#include "inc_hash_constants.h"
-#include "inc_hash_functions.cl"
-#include "inc_types.cl"
+#ifdef KERNEL_STATIC
+#include "inc_vendor.h"
+#include "inc_types.h"
+#include "inc_platform.cl"
 #include "inc_common.cl"
 #include "inc_simd.cl"
-
-#if   VECT_SIZE == 1
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i)])
-#elif VECT_SIZE == 2
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
-#elif VECT_SIZE == 4
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
-#elif VECT_SIZE == 8
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
-#elif VECT_SIZE == 16
-#define uint_to_hex_lower8(i) (u32x) (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
+#include "inc_hash_md5.cl"
 #endif
 
-__kernel void m02610_m04 (KERN_ATTR_BASIC ())
+#if   VECT_SIZE == 1
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i)])
+#elif VECT_SIZE == 2
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1])
+#elif VECT_SIZE == 4
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3])
+#elif VECT_SIZE == 8
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7])
+#elif VECT_SIZE == 16
+#define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
+#endif
+
+KERNEL_FQ void m02610_m04 (KERN_ATTR_BASIC ())
 {
   /**
    * modifier
@@ -38,7 +40,7 @@ __kernel void m02610_m04 (KERN_ATTR_BASIC ())
    * bin2asc table
    */
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -49,7 +51,7 @@ __kernel void m02610_m04 (KERN_ATTR_BASIC ())
                  | ((i1 < 10) ? '0' + i1 : 'a' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -359,15 +361,15 @@ __kernel void m02610_m04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m02610_m08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m02610_m08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m02610_m16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m02610_m16 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m02610_s04 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m02610_s04 (KERN_ATTR_BASIC ())
 {
   /**
    * modifier
@@ -381,7 +383,7 @@ __kernel void m02610_s04 (KERN_ATTR_BASIC ())
    * bin2asc table
    */
 
-  __local u32 l_bin2asc[256];
+  LOCAL_VK u32 l_bin2asc[256];
 
   for (u32 i = lid; i < 256; i += lsz)
   {
@@ -392,7 +394,7 @@ __kernel void m02610_s04 (KERN_ATTR_BASIC ())
                  | ((i1 < 10) ? '0' + i1 : 'a' - 10 + i1) << 0;
   }
 
-  barrier (CLK_LOCAL_MEM_FENCE);
+  SYNC_THREADS ();
 
   if (gid >= gid_max) return;
 
@@ -717,10 +719,10 @@ __kernel void m02610_s04 (KERN_ATTR_BASIC ())
   }
 }
 
-__kernel void m02610_s08 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m02610_s08 (KERN_ATTR_BASIC ())
 {
 }
 
-__kernel void m02610_s16 (KERN_ATTR_BASIC ())
+KERNEL_FQ void m02610_s16 (KERN_ATTR_BASIC ())
 {
 }
