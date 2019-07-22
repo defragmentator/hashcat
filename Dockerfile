@@ -19,6 +19,8 @@ RUN git clone https://github.com/hashcat/hashcat.git . && \
     git submodule update --init && \
     make install
 
+RUN wget https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar
+
 CMD ["/bin/tailf","/var/log/dmesg"]
 
 # ENTRYPOINT ["hashcat"]
