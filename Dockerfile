@@ -17,8 +17,9 @@ WORKDIR /root/hashcat
 
 RUN git clone https://github.com/hashcat/hashcat.git . && \
     git submodule update --init && \
-    make install && \
-    wget https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar
+    make install 
+#    && \
+#    wget https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar
 
 CMD ["/bin/tailf","/var/log/dmesg"]
 
