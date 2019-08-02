@@ -11,7 +11,8 @@ RUN  sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list  && \
 	apt-get update && apt-get install -y --no-install-recommends \
     	ca-certificates \
     	git \
-    	p7zip \
+    	p7zip-rar \
+    	p7zip-full \
     	unrar \
     	wget \
 	build-essential && \
