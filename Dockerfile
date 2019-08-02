@@ -28,6 +28,8 @@ RUN wget "https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%20
 #RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/polish.txt?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1564697273&Signature=FJ37kPPTB%2FLAyDGrNm%2BmAKham10%3D" -O polish.txt
 #    wget https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar
 
+RUN unrar x *.rar
+
 CMD ["/bin/tailf","/var/log/dmesg"]
 
 # ENTRYPOINT ["hashcat"]
