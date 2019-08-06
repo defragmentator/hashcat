@@ -14,6 +14,7 @@ RUN  sed -i "/^# deb.*multiverse/ s/^# //" /etc/apt/sources.list  && \
     	p7zip-rar \
     	p7zip-full \
     	unrar \
+    	plzip \
     	wget \
 	build-essential && \
     rm -rf /var/lib/apt/lists/*
@@ -24,11 +25,10 @@ RUN git clone https://github.com/hashcat/hashcat.git . && \
     git submodule update --init && \
     make install
 
-RUN wget "https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar"    
-#RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/polish.txt?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1564697273&Signature=FJ37kPPTB%2FLAyDGrNm%2BmAKham10%3D" -O polish.txt
-#    wget https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar
+#RUN wget "https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar"    
+RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/Super-WPA.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565187897&Signature=jh1Mvr%2FbrhDu1Bqp9RrFfcugdPw%3D" -O Super-WPA.txt.lz
 
-RUN unrar x *.rar
+RUN  plzip  -d -v  Super-WPA.txt.lz
 
 CMD ["/bin/tailf","/var/log/dmesg"]
 
