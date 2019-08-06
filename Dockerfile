@@ -27,8 +27,9 @@ RUN git clone https://github.com/hashcat/hashcat.git . && \
 
 #RUN wget "https://fra1.digitaloceanspaces.com/labor-backup/WPA-PSK%20WORDLIST%203%20Final%20%2813%20GB%29.rar"    
 RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/Super-WPA.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565187897&Signature=jh1Mvr%2FbrhDu1Bqp9RrFfcugdPw%3D" -O Super-WPA.txt.lz
-
-RUN  plzip  -d -v  Super-WPA.txt.lz
+RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/Custom-WPA.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565202439&Signature=sadHGfejPuMkf%2BFxfVPVhbQbhN8%3D" -O Custom-WPA.txt.lz
+RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/premium_gigant.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565202473&Signature=muLexkFw7Swlpx%2BRlAZoN4q%2FDHI%3D" -O premium_gigant.txt.lz
+#RUN  plzip  -d -v  Super-WPA.txt.lz
 
 CMD ["/bin/tailf","/var/log/dmesg"]
 
