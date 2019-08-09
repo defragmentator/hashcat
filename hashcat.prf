@@ -1,0 +1,13 @@
+root=/root
+root=ssh://TARGET_HOST
+ignore = Path hashcat
+ignore = Path .ssh
+ignore = Path .unison
+sshargs=
+auto=true
+batch=true
+confirmbigdel=true
+prefer=newer
+silent=true
+times=true
+ignorearchives=true
