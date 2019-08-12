@@ -28,9 +28,10 @@ RUN git clone https://github.com/hashcat/hashcat.git . && \
     git submodule update --init && \
     make install
 
-RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/Super-WPA.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565464944&Signature=klqXgaFUezOct3VvPHDxq4p0rec%3D" -O Super-WPA.txt.lz
-RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/Custom-WPA.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565464964&Signature=oITrHLrlt5szUu7LGF9I1M9fSaY%3D" -O Custom-WPA.txt.lz
-RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/premium_gigant.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565464984&Signature=uEe1XwyDUqYFK2sZfhmxcwuWbNA%3D" -O premium_gigant.txt.lz
+RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/Super-WPA.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565736220&Signature=jUfbWSFp0aaf7i%2FcJc7fVXFqAVs%3D" -O Super-WPA.txt.lz
+RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/Custom-WPA.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565736237&Signature=2OMB2KWaK2RC4CbyMVQVLli%2B2vA%3D" -O Custom-WPA.txt.lz
+RUN  wget "https://labor-backup.fra1.digitaloceanspaces.com/premium_gigant.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565736254&Signature=%2Bd%2Bc7h8oYhMUQgxgZ0CiwxP4v60%3D" -O premium_gigant.txt.lz
+RUN wget "https://labor-backup.fra1.digitaloceanspaces.com/Top1pt8Billion-WPA-probable-v2.txt.lz?AWSAccessKeyId=T2BTXTL2OD6KYF5FJVMB&Expires=1565736305&Signature=aQPBmXcCGoeshiBer3eB3q0Dp9Y%3D" -O Top1pt8Billion-WPA-probable-v2.txt.lz
 #RUN  plzip  -d -v  Super-WPA.txt.lz
 
 run echo '* * * * * /usr/bin/unison hashcat &> /dev/null' | crontab
